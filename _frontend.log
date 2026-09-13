@@ -1,0 +1,22 @@
+
+> supply-chain-agent-console@0.1.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v8.3.0[39m  [2mready in [0m[1m325[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m5:06:32 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m5:06:38 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/SystemStatusPanel.tsx[22m
+[2m5:07:38 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/BeforeAfterCard.tsx, /src/components/SystemStatusPanel.tsx[22m
+[2m5:07:45 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/SystemStatusPanel.tsx[22m
+[2m5:07:54 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DisruptionPanel.tsx[22m
+[2m5:09:06 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AgentFeed.tsx, /src/components/DisruptionPanel.tsx, /src/components/OutcomeCard.tsx, /src/components/SystemStatusPanel.tsx[22m
+[2m5:09:16 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AgentFeed.tsx, /src/components/DisruptionPanel.tsx, /src/components/OutcomeCard.tsx, /src/components/SystemStatusPanel.tsx[22m
+[2m5:09:25 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AgentFeed.tsx, /src/components/DisruptionPanel.tsx, /src/components/OutcomeCard.tsx, /src/components/SystemStatusPanel.tsx, /src/components/BeforeAfterCard.tsx[22m
+[2m5:11:24 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DisruptionPanel.tsx[22m
+[2m5:14:58 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/DisruptionPanel.tsx[22m
+[2m5:18:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m6:35:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AgentFeed.tsx, /src/components/DisruptionPanel.tsx, /src/components/OutcomeCard.tsx, /src/components/SystemStatusPanel.tsx[22m
+[2m6:35:20 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/OutcomeCard.tsx[22m
+[2m6:35:39 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AgentFeed.tsx, /src/components/DisruptionPanel.tsx, /src/components/OutcomeCard.tsx, /src/components/SystemStatusPanel.tsx[22m

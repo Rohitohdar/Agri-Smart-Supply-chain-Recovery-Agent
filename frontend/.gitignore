@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+# Local environment overrides. The committed template is .env.example.
+.env
+.env.local
+.env.*.local
+
+# Editor and tooling caches
+.vite/
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,25 @@
+{
+  "name": "supply-chain-agent-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Operator console for the supply-chain recovery agent: live status, disruption controls and a readable reasoning trace.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "check": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

@@ -1,0 +1,9 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+SQLAlchemy>=2.0.35
+pydantic>=2.8.2
+pydantic-settings>=2.4.0
+slowapi>=0.1.9
+# Optional extra: only needed when GROQ_API_KEY is set. Without it the agent
+# falls back to the deterministic template explainer.
+groq>=0.11.0
