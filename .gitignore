@@ -1,0 +1,30 @@
+# ─── Runtime artifacts ────────────────────────────────────────────────
+# Dev-server / preview logs (regenerated whenever a server runs)
+*.log
+# SQLite databases (regenerated from the seed on startup or `python -m app.db.seed`)
+*.db
+*.sqlite
+*.sqlite3
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# ─── Secrets ──────────────────────────────────────────────────────────
+# Real credentials never belong in the repo; commit only the .env.example templates.
+.env
+.env.local
+.env.*.local
+
+# ─── OS noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

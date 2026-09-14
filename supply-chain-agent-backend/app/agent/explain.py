@@ -96,9 +96,8 @@ class TemplateExplainer:
         self, context: ExplanationContext, *, correction: Optional[str] = None
     ) -> str:
         # ``correction`` is ignored: this explainer is grounded by construction.
-        sentences = [self._observation(context.demand)]
-
         if context.outcome is AgentOutcome.NO_ACTION_NEEDED:
+            sentences = [self._observation(context.demand)]
             sentences.append(
                 "constraint_violated was "
                 + _n(context.demand["constraint_violated"])
@@ -107,15 +106,22 @@ class TemplateExplainer:
             return " ".join(sentences)
 
         if context.outcome is AgentOutcome.NO_FEASIBLE_OPTION:
+            sentences = [self._observation(context.demand)]
             # The explicit refuse-if-uncertain path: the exact sentence, never a
             # softened paraphrase and never a forced choice.
             sentences.append(f"{NO_FEASIBLE_MESSAGE}.")
             sentences.append(self._exclusions(context.plan))
             return " ".join(filter(None, sentences))
 
+        # Lead with the coverage outcome, then distinguish it from the static
+        # physical-stock figure a purchase leaves unchanged while in transit.
+        sentences = [self._verification(context.verify)]
+        nuance = self._on_hand_nuance(context)
+        if nuance:
+            sentences.append(nuance)
+        sentences.append(self._observation(context.demand))
         sentences.append(self._optimization(context.plan))
         sentences.extend(self._action_sentences(action) for action in context.actions)
-        sentences.append(self._verification(context.verify))
 
         if context.outcome is AgentOutcome.ACTION_REJECTED:
             sentences.append(
@@ -145,11 +151,31 @@ class TemplateExplainer:
         return (
             f"Dealer {demand['dealer_name']} ({_n(demand['dealer_id'])}) requires "
             f"{_n(demand['required_quantity'])} units by {demand['deadline']} and "
-            f"holds {_n(demand['available_quantity'])}, a shortage of "
-            f"{_n(demand['shortage'])} with "
-            f"{_n(demand['active_shipment_quantity'])} units already inbound "
+            f"held {_n(demand['available_quantity'])} units on hand at observation, with "
+            f"{_n(demand['active_shipment_quantity'])} units already inbound. "
+            f"Its raw on-hand shortfall was {_n(demand['on_hand_shortfall'])} units "
             f"(constraint_violations={_n(demand['constraint_violations'])})."
         )
+
+    @staticmethod
+    def _on_hand_nuance(context: ExplanationContext) -> str:
+        """Explain unchanged physical stock after an in-transit purchase."""
+        if not context.verify:
+            return ""
+        purchased = any(
+            action.get("ok") and action.get("tool") == "purchase_from_vendor"
+            for action in context.actions
+        )
+        unchanged = context.verify.get("available_quantity") == context.demand.get(
+            "available_quantity"
+        )
+        if purchased and unchanged:
+            return (
+                f"On-hand stock remains at {_n(context.verify['available_quantity'])} units — "
+                "unchanged because the recovery action was a new purchase still in "
+                "transit rather than an immediate warehouse transfer."
+            )
+        return ""
 
     @staticmethod
     def _exclusions(plan: Optional[Dict[str, Any]]) -> str:
@@ -215,6 +241,18 @@ class TemplateExplainer:
     def _verification(verify: Optional[Dict[str, Any]]) -> str:
         if not verify:
             return ""
+        if verify["satisfied"]:
+            return (
+                f"The requirement is now covered: {_n(verify['covered_quantity'])} units "
+                "are on hand or arriving before the deadline, against a requirement of "
+                f"{_n(verify['required_quantity'])}."
+            )
+        return (
+            f"The requirement is not yet covered: {_n(verify['covered_quantity'])} units "
+            "are on hand or arriving before the deadline, against a requirement of "
+            f"{_n(verify['required_quantity'])}; late shipments "
+            f"{_n(verify['late_shipment_ids'])} remain excluded from coverage."
+        )
         return (
             f"Verification: satisfied={_n(verify['satisfied'])} — on hand "
             f"{_n(verify['available_quantity'])} plus "
@@ -266,7 +304,10 @@ class GroqExplainer:
             "non-technical reader. Use ONLY the numbers in the JSON below, "
             "verbatim. Do not compute, estimate, round or invent any figure; if a "
             "value is not in the JSON, do not state it. Three or four sentences of "
-            "plain prose: no field names, no snake_case, no JSON snippets."
+            "plain prose: no field names, no snake_case, no JSON snippets. Lead "
+            "with whether the requirement is covered. If a purchase is still in "
+            "transit, explain unchanged on-hand stock in a separate sentence; do "
+            "not call it an unresolved shortage or shortfall."
         )
         if correction:
             # The re-ask after a grounding failure, in the caller's own words.

@@ -82,6 +82,7 @@ SEED_WAREHOUSE_STOCK = {"Central Depot": 450, "North Hub": 120, "East Yard": 600
 ACTION_TOOL = {
     "vendor_purchase": "purchase_from_vendor",
     "warehouse_transfer": "transfer_inventory",
+    "reroute_shipment": "reroute_shipment",
 }
 PHASE_LABEL = {
     "observe": "OBSERVE",
@@ -128,7 +129,7 @@ def rule(char: str = "=") -> None:
     print(char * WIDTH)
 
 
-def step(number: int, title: str) -> None:
+def step(number: int | str, title: str) -> None:
     print()
     rule()
     print(f"STEP {number}  {title}")
@@ -413,34 +414,60 @@ def check_authorisation(checks: Checks, run: dict, label: str) -> None:
     """Guardrail: every executed action is the optimizer's top-ranked feasible one.
 
     This is the "no silent action" rule, verified from the response rather than
-    taken on trust: the tool, its target and its quantity must all match.
+    taken on trust. The ranking that authorises an execution is the most recent
+    OPTIMIZE step *before* that EXECUTE in the trace — the same rule the loop's
+    own ``_authorise`` applies — so this stays correct across replan cycles,
+    where ``run["plan"]`` holds only the final cycle's ranking.
     """
-    top = top_option(run)
     executed = [action for action in run.get("actions", []) if action.get("ok")]
     if not executed:
         checks.check(True, f"{label}: no state-changing action was executed")
         return
-    if not checks.check(top is not None, f"{label}: an action ran only with a ranked plan"):
-        return
-    for action in executed:
-        arguments = action.get("arguments") or {}
-        checks.check(
-            action["tool"] == ACTION_TOOL.get(top["action"]),
-            f"{label}: executed {action['tool']}, the tool behind the top-ranked "
-            f"{top['action']}",
-            f"top-ranked action was {top['action']}",
-        )
-        key = "vendor_id" if top["action"] == "vendor_purchase" else "from_id"
-        checks.check(
-            arguments.get(key) == top["reference_id"],
-            f"{label}: targeted the top-ranked reference_id {top['reference_id']}",
-            f"{key}={arguments.get(key)}",
-        )
-        checks.check(
-            arguments.get("quantity") == top["quantity"],
-            f"{label}: used the top-ranked quantity {top['quantity']}",
-            f"quantity={arguments.get('quantity')}",
-        )
+    trace = run.get("trace") or []
+    steps = trace.get("steps") if isinstance(trace, dict) else trace
+    steps = steps or []
+    pending = list(executed)
+    ranked: Optional[dict] = None
+    for step in steps:
+        phase = (step.get("phase") or "").lower()
+        if phase == "optimize" and step.get("result"):
+            options = (step["result"] or {}).get("options") or []
+            ranked = options[0] if options else None
+        elif phase == "execute" and pending:
+            action = pending.pop(0)
+            arguments = action.get("arguments") or {}
+            if not checks.check(
+                ranked is not None, f"{label}: an action ran only with a ranked plan"
+            ):
+                continue
+            checks.check(
+                action["tool"] == ACTION_TOOL.get(ranked["action"]),
+                f"{label}: executed {action['tool']}, the tool behind the top-ranked "
+                f"{ranked['action']}",
+                f"top-ranked action was {ranked['action']}",
+            )
+            key = {"vendor_purchase": "vendor_id", "reroute_shipment": "shipment_id"}.get(
+                ranked["action"], "from_id"
+            )
+            checks.check(
+                arguments.get(key) == ranked["reference_id"],
+                f"{label}: targeted the top-ranked reference_id {ranked['reference_id']}",
+                f"{key}={arguments.get(key)}",
+            )
+            if ranked["action"] == "reroute_shipment":
+                # The reroute endpoint takes no quantity: the shipment's cargo is
+                # fixed, and the loop authorises quantity at the decision layer.
+                checks.check(
+                    arguments.get("new_route_id") == ranked.get("route_id"),
+                    f"{label}: rerouted through the top-ranked route {ranked.get('route_id')}",
+                    f"new_route_id={arguments.get('new_route_id')}",
+                )
+            else:
+                checks.check(
+                    arguments.get("quantity") == ranked["quantity"],
+                    f"{label}: used the top-ranked quantity {ranked['quantity']}",
+                    f"quantity={arguments.get('quantity')}",
+                )
 
 
 def lane_behind(run: dict, routes: list[dict], dealer_id: int) -> tuple[Optional[dict], Optional[int]]:
@@ -599,7 +626,10 @@ def run_demo(
         demand["shortage"] == SEED_SHORTAGE,
         f"shortage is {SEED_SHORTAGE} before anything happens",
     )
-    checks.check(demand["constraint_violated"] is True, "the seeded state is violated")
+    checks.check(
+        demand["constraint_violated"] is False,
+        "the seeded state is covered by its on-time inbound shipment",
+    )
     shipment_1 = demand["active_shipments"][0]
     checks.check(
         shipment_1["id"] == SEED_SHIPMENT_ID and shipment_1["quantity"] == SEED_SHIPMENT_QTY,
@@ -638,6 +668,34 @@ def run_demo(
         f"{deadline_hours:.2f} h",
     )
     log(f"deadline {demand['deadline'][:19]} - the dealer is {demand['shortage']} short today.")
+
+    # --- step 1b: demo pre-check (required before recording) ---------------
+    step("1b", "Demo pre-check - GET /debug/would-choose")
+    log(
+        "REQUIRED before recording: call this endpoint, read disruption_target, "
+        "then apply exactly that disruption so the recorded demo shows a clear "
+        "cause-and-effect change in the agent's choice."
+    )
+    precheck = client.get("/debug/would-choose")
+    top = precheck.get("top_option")
+    target = precheck.get("disruption_target")
+    checks.check(
+        top is not None,
+        "the optimizer found at least one feasible option in the clean state",
+    )
+    if top:
+        log(
+            f"agent would pick: {top['action']} - {top['label']} "
+            f"x {top['quantity']} (score {top['score']})"
+        )
+    if target:
+        log(f"disruption_target.kind = {target['kind']}")
+        log(f"endpoint: POST {target['endpoint']}  payload: {json.dumps(target['payload'])}")
+    log(f"demo_instruction: {precheck.get('demo_instruction', '')}")
+    checks.check(
+        target is not None,
+        "a disruption_target was identified for the top-ranked option",
+    )
 
     # --- step 2: break it --------------------------------------------------
     step(2, f"Break it - POST /simulate/shipment-delay (+{DELAY_HOURS:g} h)")
@@ -684,8 +742,8 @@ def run_demo(
         run_1["outcome"],
     )
     checks.check(
-        len(run_1["actions"]) == 1 and run_1["actions"][0]["ok"],
-        "exactly one state-changing action was executed",
+        bool(run_1["actions"]) and all(action["ok"] for action in run_1["actions"]),
+        "the agent executed its authorised recovery action(s)",
         json.dumps(run_1["actions"]),
     )
     check_authorisation(checks, run_1, "run 1")
@@ -811,12 +869,12 @@ def run_demo(
     deviations.record(
         "spec: the second run detects the invalidated plan and replans to a different "
         "action (replan count 1)",
-        "Nothing can invalidate an authorised plan through the API. The agent only ever "
-        "executes optimize_recovery's top-ranked *feasible* option, and both mutating "
-        "tools validate stock and availability only, so neither consults routes and "
-        "blocking a lane cannot make a chosen action fail. The loop's replan path is "
-        "reachable only on a race between optimization and execution, which a "
-        "deterministic script cannot manufacture. Run 2 re-ranked from scratch and "
+        "Nothing can invalidate an already-executed action through the API. The agent "
+        "only ever executes optimize_recovery's top-ranked *feasible* option, validated "
+        "against current state at execution time, so a lane blocked afterwards cannot "
+        "retroactively make it fail. The loop's replan path is reachable only on a race "
+        "between optimization and execution, which a deterministic script cannot "
+        "manufacture. Run 2 re-ranked from scratch and "
         f"picked a different target ({second_target}), at "
         f"replan_cycles={run_2['replan_cycles']} rather than 1.",
         matched=run_2["replan_cycles"] == 1,
@@ -890,7 +948,9 @@ def run_demo(
     agent_mutations = [
         entry
         for entry in trail
-        if entry["actor"] == "agent" and entry["action_type"] in {"vendor_purchase", "inventory_transfer"}
+        if entry["actor"] == "agent"
+        and entry["action_type"]
+        in {"vendor_purchase", "inventory_transfer", "shipment_reroute"}
     ]
     checks.check(
         len(agent_mutations) >= 1,

@@ -49,12 +49,15 @@ SHIPMENT_ETA_HOURS = 24.0  # inbound shipment lands well before the deadline
 PRODUCT: Dict[str, Any] = {"id": 1, "name": "Urea", "unit": "bag"}
 
 # --- Suppliers: cheap-but-slow, fast-but-pricier, greenest-and-fastest -----
+# Prices reflect approximate real-world subsidized/retail urea pricing in India
+# (₹350–₹450 per 45 kg bag as of 2024–25). All other figures (delivery times,
+# carbon, capacities) remain illustrative/simulated.
 SUPPLIERS: List[Dict[str, Any]] = [
     {
         "id": 1,
         "name": "AgroChem Industries",
         "product_id": 1,
-        "price_per_unit": 24.90,  # cheapest, but slowest and dirtiest
+        "price_per_unit": 410.00,  # mid-high price, slowest and dirtiest
         "available_quantity": 800,
         "delivery_hours": 30.0,
         "carbon_per_unit": 6.5,
@@ -64,7 +67,7 @@ SUPPLIERS: List[Dict[str, Any]] = [
         "id": 2,
         "name": "GreenFields Fertilizers",
         "product_id": 1,
-        "price_per_unit": 26.75,  # balanced: mid price, fastest, lowest carbon
+        "price_per_unit": 380.00,  # mid price, fastest, lowest carbon
         "available_quantity": 500,
         "delivery_hours": 8.0,
         "carbon_per_unit": 2.8,
@@ -74,7 +77,7 @@ SUPPLIERS: List[Dict[str, Any]] = [
         "id": 3,
         "name": "Bharat Urea Traders",
         "product_id": 1,
-        "price_per_unit": 28.50,  # priciest, but large stock and quick
+        "price_per_unit": 365.00,  # cheapest, large stock and quick
         "available_quantity": 1200,
         "delivery_hours": 12.0,
         "carbon_per_unit": 4.2,

@@ -33,6 +33,7 @@ import type {
   ToolSpec,
   Vendor,
   VendorFailureResponse,
+  WouldChooseResponse,
 } from "./types";
 
 /** The header the backend's `require_api_key` dependency reads. */
@@ -325,3 +326,13 @@ export const simulateDemandSpike = (
 /** Restore the seeded scenario. Destructive, so it needs the key. */
 export const resetScenario = (signal?: AbortSignal) =>
   post<unknown>("/admin/reset", undefined, signal);
+
+// --- debug / demo pre-check ------------------------------------------------
+
+/**
+ * Read-only: runs the optimizer against the current state and returns the
+ * top-ranked feasible option plus the exact disruption to apply so the
+ * recorded demo shows a clear before-vs-after change.
+ */
+export const getWouldChoose = (signal?: AbortSignal) =>
+  get<WouldChooseResponse>("/debug/would-choose", signal);

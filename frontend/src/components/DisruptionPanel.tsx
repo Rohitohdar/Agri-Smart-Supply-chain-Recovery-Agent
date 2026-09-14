@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Snapshot } from "../api/hooks";
+import type { WouldChooseResponse } from "../api/types";
 import {
   errorMessage,
+  getWouldChoose,
   isMissingApiKey,
   isRateLimited,
   isUnauthorized,
@@ -89,6 +91,24 @@ export function DisruptionPanel({
   const [busy, setBusy] = useState<ControlKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [confirmSpike, setConfirmSpike] = useState(false);
+
+  const [precheck, setPrecheck] = useState<WouldChooseResponse | null>(null);
+  const [precheckBusy, setPrecheckBusy] = useState(false);
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
+
+  async function runPrecheck() {
+    setPrecheckBusy(true);
+    setPrecheckError(null);
+    setPrecheck(null);
+    try {
+      setPrecheck(await getWouldChoose());
+    } catch (caught) {
+      setPrecheckError(errorMessage(caught));
+    } finally {
+      setPrecheckBusy(false);
+    }
+  }
 
   const [shipmentId, setShipmentId] = useState<number | null>(null);
   const [delayHours, setDelayHours] = useState("12");
@@ -130,10 +150,10 @@ export function DisruptionPanel({
     }
   }, [upVendors, vendorId]);
 
-  // Transient confirmations expire on their own. Without this, a message from
-  // before a scenario reset would sit there describing state that is gone.
+  // Reset spike confirm when the outcome/error clears
   useEffect(() => {
     if (outcome === null && error === null) return;
+    setConfirmSpike(false);
     const timer = window.setTimeout(() => {
       setOutcome(null);
       setError(null);
@@ -184,6 +204,17 @@ export function DisruptionPanel({
   const locked = blockedReason !== null;
   const anyBusy = busy !== null;
 
+  const target = precheck?.disruption_target ?? null;
+  const topOption = precheck?.top_option ?? null;
+
+  function targetSummary(): string | null {
+    if (!target) return null;
+    if (target.kind === "vendor_failure") return `Disable vendor "${target.vendor_name}" (id ${target.vendor_id})`;
+    if (target.kind === "route_block") return `Block route #${target.route_id}`;
+    if (target.kind === "shipment_delay") return `Delay shipment #${target.shipment_id} by 72 h`;
+    return null;
+  }
+
   return (
     <section className="card" aria-labelledby="disruption-heading">
       <header className="card__header">
@@ -196,6 +227,41 @@ export function DisruptionPanel({
         endpoints. Every call is validated against live state, written to the audit trail, and
         can be refused — you will be told, not faked.
       </p>
+
+      {/* Demo pre-check */}
+      <div className="control">
+        <div className="control__head">
+          <h3>Demo pre-check</h3>
+          <span className="muted">Run before recording — picks the targeted disruption for you</span>
+        </div>
+        <div className="control__row">
+          <button
+            type="button"
+            className="button"
+            disabled={precheckBusy}
+            onClick={() => void runPrecheck()}
+          >
+            {precheckBusy ? "Checking…" : "What would the agent choose?"}
+          </button>
+        </div>
+        {precheckError ? <p className="notice notice--danger">{precheckError}</p> : null}
+        {precheck && topOption ? (
+          <div className="notice notice--info" style={{ marginTop: "0.5rem" }}>
+            <strong>Agent would pick:</strong>{" "}
+            {topOption.action} — {topOption.label} × {topOption.quantity} (score {topOption.score.toFixed(4)})
+            {target ? (
+              <>
+                <br />
+                <strong>Apply this disruption first:</strong> {targetSummary()}
+                <br />
+                <span className="muted" style={{ fontSize: "0.8em" }}>{precheck.demo_instruction}</span>
+              </>
+            ) : null}
+          </div>
+        ) : precheck && !topOption ? (
+          <p className="notice notice--warn">No feasible option — reset the scenario before recording.</p>
+        ) : null}
+      </div>
 
       {blockedReason ? <p className="notice notice--warn">{blockedReason}</p> : null}
       {error ? <p className="notice notice--danger">{error}</p> : null}
@@ -317,7 +383,9 @@ export function DisruptionPanel({
           busyLabel="Raising…"
           busy={busy === "spike"}
           locked={locked || anyBusy || !spikeValid || demand === null}
-          onAction={() =>
+          onAction={() => {
+            if (!confirmSpike) { setConfirmSpike(true); return; }
+            setConfirmSpike(false);
             void run("spike", async () => {
               const result = await simulateDemandSpike(demand?.dealer_id ?? 0, spikeNumber);
               return `Requirement raised ${formatNumber(
@@ -325,8 +393,8 @@ export function DisruptionPanel({
               )} → ${formatNumber(result.dealer.required_quantity)}; shortfall went ${formatNumber(
                 result.shortage_before,
               )} → ${formatNumber(result.shortage_after)}.`;
-            })
-          }
+            });
+          }}
           hintText={
             <>
               {demand
@@ -338,8 +406,36 @@ export function DisruptionPanel({
             </>
           }
         >
-          {/* step 1, not 50: HTML steps from `min`, so a step of 50 would flag a
-              perfectly valid 1,050 as a step mismatch. */}
+          {/* Inline confirm for demand spike */}
+          {confirmSpike ? (
+            <div className="inline-confirm">
+              <span className="inline-confirm__prompt">⚠ Raise to {formatNumber(spikeNumber)} units?</span>
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={() => {
+                  setConfirmSpike(false);
+                  void run("spike", async () => {
+                    const result = await simulateDemandSpike(demand?.dealer_id ?? 0, spikeNumber);
+                    return `Requirement raised ${formatNumber(
+                      result.previous_required_quantity,
+                    )} → ${formatNumber(result.dealer.required_quantity)}; shortfall went ${formatNumber(
+                      result.shortage_before,
+                    )} → ${formatNumber(result.shortage_after)}.`;
+                  });
+                }}
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setConfirmSpike(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
           <label className="control__narrow">
             <span>New requirement</span>
             <input

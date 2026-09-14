@@ -60,6 +60,9 @@ class RankedOptionRead(ORMModel):
     delivery_contribution: float
     carbon_contribution: float
     score: float
+    #: True when this was the only candidate that survived filtering; the score
+    #: of 0 is not a comparative rank and should not be displayed as one.
+    single_feasible_option: bool = False
 
     @classmethod
     def from_option(cls, option: RankedOption) -> "RankedOptionRead":
@@ -80,6 +83,7 @@ class RankedOptionRead(ORMModel):
             delivery_contribution=option.delivery_contribution,
             carbon_contribution=option.carbon_contribution,
             score=option.score,
+            single_feasible_option=option.single_feasible_option,
         )
 
 
@@ -105,7 +109,6 @@ class RecoveryPlanResponse(ORMModel):
     weights: WeightsRead
     options: list[RankedOptionRead] = Field(default_factory=list)
     excluded: list[ExcludedOptionRead] = Field(default_factory=list)
-    reroute_options: list[RankedOptionRead] = Field(default_factory=list)
 
     @classmethod
     def from_plan(cls, plan: RecoveryPlan) -> "RecoveryPlanResponse":
@@ -132,8 +135,5 @@ class RecoveryPlanResponse(ORMModel):
                     hours_available=item.hours_available,
                 )
                 for item in plan.excluded
-            ],
-            reroute_options=[
-                RankedOptionRead.from_option(option) for option in plan.reroute_options
             ],
         )

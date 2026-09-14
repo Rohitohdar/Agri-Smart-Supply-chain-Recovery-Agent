@@ -13,9 +13,12 @@ router = APIRouter(prefix="/demand", tags=["demand"])
     response_model=DemandResponse,
     summary="Dealer demand, stock, deadline and constraint status",
     description=(
-        "``shortage``, ``constraint_violations`` and ``constraint_violated`` are "
-        "computed: a constraint is violated when there is a shortage, or when an "
-        "in-flight shipment inbound to the dealer is expected after the deadline."
+        "``shortage`` / ``on_hand_shortfall`` report the raw on-hand gap as a "
+        "secondary stat. ``constraint_violated`` uses the coverage definition: "
+        "violated when (on_hand + inbound_by_deadline) < required, or when an "
+        "in-flight shipment is expected after the deadline. This matches the "
+        "agent's own ``verify_state`` tool, so the status badge and the agent's "
+        "verdict always agree."
     ),
 )
 def get_demand(

@@ -316,7 +316,9 @@ def test_cancel_marks_the_shipment_and_frees_inbound_demand(seeded_client):
     demand = seeded_client.get("/demand").json()
     assert demand["active_shipments"] == []
     assert demand["active_shipment_quantity"] == 0
-    assert demand["constraint_violations"] == ["shortage of 700 units (300 of 1000 on hand)"]
+    assert demand["constraint_violations"] == [
+        "coverage shortfall of 700 units (300 of 1000 covered by on-hand + inbound-by-deadline)"
+    ]
 
 
 def test_cancelling_twice_is_refused(seeded_client):
@@ -377,7 +379,7 @@ def test_every_action_records_before_and_after_in_the_audit_trail(seeded_client)
     purchase = by_action["vendor_purchase"]
     assert purchase["details"]["vendor_available"] == {"before": 800, "after": 700}
     assert purchase["details"]["quantity"] == 100
-    assert purchase["details"]["total_price"] == 2490.0
+    assert purchase["details"]["total_price"] == 41000.0  # 410 * 100
 
     cancel = by_action["shipment_cancel"]
     assert cancel["details"]["status"] == {"before": "PENDING", "after": "CANCELLED"}

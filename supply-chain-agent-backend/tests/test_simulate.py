@@ -111,7 +111,7 @@ def test_vendor_failure_takes_the_vendor_out_of_service(seeded_client):
 
     assert seeded_client.get("/suppliers/2").json()["is_available"] is False
     available = seeded_client.get("/vendors", params={"only_available": "true"}).json()
-    assert [vendor["id"] for vendor in available] == [1, 3]
+    assert [vendor["id"] for vendor in available] == [3, 1]  # Bharat (365) then AgroChem (410)
 
 
 def test_vendor_failure_is_refused_twice(seeded_client):
@@ -186,6 +186,8 @@ def test_demand_spike_raises_the_requirement_and_the_shortage(seeded_client):
     demand = seeded_client.get("/demand").json()
     assert demand["required_quantity"] == 1500
     assert demand["shortage"] == 1200
+    assert demand["on_hand_shortfall"] == 1200
+    assert demand["covered_quantity"] == 1000  # 300 on hand + 700 inbound
     assert demand["constraint_violated"] is True
 
 

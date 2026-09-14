@@ -21,10 +21,10 @@ export function formatDecimal(value: number | null | undefined, digits = 1): str
   return Number.isInteger(value) ? formatNumber(value) : value.toFixed(digits);
 }
 
-/** Money, e.g. 19950 -> "₹19,950". */
+/** Money, rounded to the nearest rupee with thousands separators, e.g. 19950.4 -> "₹19,950". */
 export function formatCost(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `${CURRENCY}${formatDecimal(value, 2)}`;
+  return `${CURRENCY}${Math.round(value).toLocaleString("en-IN")}`;
 }
 
 /**
@@ -42,10 +42,10 @@ export function formatHours(hours: number | null | undefined): string {
   return rest === 0 ? `${days} d` : `${days} d ${formatDecimal(rest)} h`;
 }
 
-/** Carbon as the backend reports it — a plain weight in kg, no invented units. */
+/** Carbon rounded to the nearest whole kilogram, e.g. 2940.3 -> "2,940 kg". */
 export function formatCarbon(kg: number | null | undefined): string {
   if (kg === null || kg === undefined || Number.isNaN(kg)) return "—";
-  return `${formatDecimal(kg, 1)} kg`;
+  return `${Math.round(kg).toLocaleString("en-IN")} kg`;
 }
 
 /** A short local clock time. The backend sends naive UTC, so it is read as UTC. */

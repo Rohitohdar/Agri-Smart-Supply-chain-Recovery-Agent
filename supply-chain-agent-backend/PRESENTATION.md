@@ -216,11 +216,11 @@ Six candidates exist; **four are excluded**, because no single source holds 700
 bags — the warehouses hold 450, 120 and 600, and one vendor holds 500.
 
 **Say:** "Two options survive, and the top-ranked one is a purchase of 700 bags
-from Bharat Urea Traders: **₹19,950, 12 hours, 2,940 kg of carbon, score 0.40**.
+from Bharat Urea Traders: **₹255,500, 12 hours, 2,940 kg of carbon, score 0.00**.
 
-"Note what the scoring did: AgroChem is cheaper at ₹17,430, but it is 30 hours out
-and dirtier. With cost and time weighted equally, paying ₹2,520 more buys 18 hours
-— so Bharat wins. The agent didn't decide that. The optimizer did."
+"Bharat is also the lowest-cost feasible supplier at ₹255,500; AgroChem costs
+₹287,000, is 30 hours out and is dirtier. The optimizer therefore ranks Bharat
+first on all three metrics. The agent didn't decide that. The optimizer did."
 
 ---
 
@@ -264,7 +264,7 @@ lane into the dealer.
 
 "The agent runs again and re-ranks from scratch. **Bharat is out** — it only has
 500 bags left after our purchase, and we need 700. The top option is now AgroChem
-at ₹17,430, and it executes that instead.
+at ₹287,000, and it executes that instead.
 
 "Being precise about what just happened, because it matters: the plan changed
 because the *stock* changed, not because the route block invalidated it. Routing

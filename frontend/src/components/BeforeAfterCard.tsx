@@ -1,6 +1,8 @@
 import type { AgentRun, Demand } from "../api/types";
-import { formatDateTime, formatNumber } from "../lib/format";
+import { formatDateTime, formatHours, formatNumber } from "../lib/format";
+import { compareToDeadline } from "../lib/format";
 import { coverage, inboundByDeadline } from "../lib/supply";
+import { stringAt } from "../lib/read";
 import { JsonDetails } from "./JsonDetails";
 import { StatusPill } from "./StatusPill";
 
@@ -42,6 +44,12 @@ export function BeforeAfterCard({
   const beforeCoverage = coverage(before);
   const afterCoverage = after ? coverage(after) : null;
 
+  // Plain-language lead
+  const leadText = verify?.satisfied
+    ? `Recovery worked — the requirement is now covered by deliveries on the way.`
+    : `The requirement is still short after the agent ran.`;
+  const leadTone = verify?.satisfied ? "ok" : "warn";
+
   return (
     <section className="card" aria-labelledby="before-after-heading">
       <header className="card__header">
@@ -50,6 +58,8 @@ export function BeforeAfterCard({
           {verify?.satisfied ? "Requirement covered" : "Still short"}
         </StatusPill>
       </header>
+
+      <p className={`lead lead--${leadTone}`}>{leadText}</p>
 
       <table className="table table--compare">
         <thead>
@@ -136,6 +146,11 @@ export function BeforeAfterCard({
         </p>
       ) : null}
 
+      {/* B: Baseline comparison — what if we did nothing */}
+      {verify ? (
+        <BaselineComparison before={before} run={run} />
+      ) : null}
+
       <JsonDetails
         label="view raw demand before and after"
         value={{ before, after, verify }}
@@ -183,5 +198,81 @@ function CompareRow({
         )}
       </td>
     </tr>
+  );
+}
+
+// --- B: Baseline comparison ------------------------------------------------
+
+function BaselineComparison({ before, run }: { before: Demand; run: AgentRun }) {
+  const verify = run.verify;
+  const action = run.actions.at(0) ?? null;
+  const arrival = stringAt(action?.result, "shipment", "expected_arrival");
+  const { verdict, marginHours } = compareToDeadline(arrival, before.deadline);
+
+  // "Without recovery" — the situation as it stood before the run.
+  const beforeCoverage = coverage(before);
+  const uncoveredShortfall = Math.max(before.required_quantity - beforeCoverage, 0);
+
+  // Deadline miss: how far past the deadline the delayed shipment would have landed.
+  // We use the first active shipment's ETA as the "do nothing" arrival.
+  const worstShipment = before.active_shipments
+    .filter((s) => s.expected_arrival !== null)
+    .sort((a, b) =>
+      new Date(b.expected_arrival!).getTime() - new Date(a.expected_arrival!).getTime()
+    ).at(0);
+  const { marginHours: doNothingMargin } = compareToDeadline(
+    worstShipment?.expected_arrival,
+    before.deadline,
+  );
+
+  const withRecovery = verify?.satisfied ?? false;
+
+  return (
+    <div className="block">
+      <h3>What if the agent had done nothing?</h3>
+      <div className="baseline">
+        <div className="baseline__col baseline__col--bad">
+          <div className="baseline__eyebrow">Without recovery</div>
+          <div className="baseline__headline baseline__headline--bad">
+            {uncoveredShortfall > 0
+              ? `Short by ${formatNumber(uncoveredShortfall)} units`
+              : "Coverage marginal"}
+          </div>
+          <div className="baseline__detail">
+            {doNothingMargin !== null && doNothingMargin < 0
+              ? `Deadline missed by ${formatHours(Math.abs(doNothingMargin))}`
+              : doNothingMargin !== null
+                ? `Latest shipment arrives ${formatHours(doNothingMargin)} before deadline`
+                : "No shipment ETA recorded"}
+          </div>
+          <div className="baseline__detail">
+            Coverage: {formatNumber(beforeCoverage)} of {formatNumber(before.required_quantity)} required
+          </div>
+        </div>
+
+        <div className="baseline__arrow" aria-hidden="true">→</div>
+
+        <div className="baseline__col baseline__col--good">
+          <div className="baseline__eyebrow">With recovery</div>
+          <div className={`baseline__headline baseline__headline--${withRecovery ? "good" : "bad"}`}>
+            {withRecovery ? "Fully covered" : "Still short"}
+          </div>
+          <div className="baseline__detail">
+            {verdict === "on_time" && marginHours !== null
+              ? `Arrives ${formatHours(marginHours)} before the deadline`
+              : verdict === "late" && marginHours !== null
+                ? `Arrives ${formatHours(Math.abs(marginHours))} after the deadline`
+                : verify
+                  ? `${formatNumber(verify.covered_quantity)} of ${formatNumber(verify.required_quantity)} covered`
+                  : "No arrival recorded"}
+          </div>
+          {verify ? (
+            <div className="baseline__detail">
+              Coverage: {formatNumber(verify.covered_quantity)} of {formatNumber(verify.required_quantity)} required
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }

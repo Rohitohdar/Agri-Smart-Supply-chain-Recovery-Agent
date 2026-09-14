@@ -83,7 +83,12 @@ export interface Demand {
   available_quantity: number;
   deadline: string;
   active_shipments: Shipment[];
+  /** Raw gap in stock on hand; it does not determine overall health. */
   shortage: number;
+  /** Self-documenting alias for the raw on-hand gap reported by the API. */
+  on_hand_shortfall: number;
+  /** On hand plus inbound shipments arriving by the deadline. */
+  covered_quantity: number;
   active_shipment_quantity: number;
   constraint_violations: string[];
   constraint_violated: boolean;
@@ -140,7 +145,7 @@ export interface Vendor {
 
 // --- optimizer -------------------------------------------------------------
 
-export type RecoveryActionKind = "warehouse_transfer" | "vendor_purchase";
+export type RecoveryActionKind = "warehouse_transfer" | "vendor_purchase" | "reroute_shipment";
 
 export interface RankedOption {
   rank: number;
@@ -159,6 +164,8 @@ export interface RankedOption {
   delivery_contribution: number;
   carbon_contribution: number;
   score: number;
+  /** True when this was the only candidate that survived filtering; score 0 is not a comparative rank. */
+  single_feasible_option: boolean;
 }
 
 export interface ExcludedOption {
@@ -287,6 +294,47 @@ export interface DemandSpikeResponse {
   shortage_before: number;
   shortage_after: number;
   audit_log_id: number;
+}
+
+// --- debug / demo pre-check -----------------------------------------------
+
+export type DisruptionTargetKind = "vendor_failure" | "route_block" | "shipment_delay";
+
+export interface VendorDisruptionTarget {
+  kind: "vendor_failure";
+  vendor_id: number;
+  vendor_name: string;
+  endpoint: string;
+  payload: Record<string, unknown>;
+}
+
+export interface RouteDisruptionTarget {
+  kind: "route_block";
+  route_id: number;
+  endpoint: string;
+  payload: Record<string, unknown>;
+}
+
+export interface ShipmentDisruptionTarget {
+  kind: "shipment_delay";
+  shipment_id: number;
+  endpoint: string;
+  payload: Record<string, unknown>;
+}
+
+export type DisruptionTarget =
+  | VendorDisruptionTarget
+  | RouteDisruptionTarget
+  | ShipmentDisruptionTarget;
+
+export interface WouldChooseResponse {
+  shortage_quantity: number;
+  deadline: string;
+  hours_available: number;
+  top_option: RankedOption | null;
+  feasible_count: number;
+  disruption_target: DisruptionTarget | null;
+  demo_instruction: string;
 }
 
 /** The `disruption_injected` audit entry's `details`, discriminated on `disruption`. */

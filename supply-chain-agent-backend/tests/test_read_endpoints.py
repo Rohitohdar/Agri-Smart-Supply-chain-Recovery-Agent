@@ -77,21 +77,22 @@ def test_inventory_404s_for_a_missing_warehouse_in_range(seeded_client):
 def test_vendors_return_price_delivery_and_carbon_cheapest_first(seeded_client):
     vendors = seeded_client.get("/vendors").json()
     assert len(vendors) == 3
-    assert [v["id"] for v in vendors] == [1, 2, 3]
-    assert [v["price_per_unit"] for v in vendors] == [24.9, 26.75, 28.5]
+    # Cheapest first: Bharat (365) -> GreenFields (380) -> AgroChem (410)
+    assert [v["id"] for v in vendors] == [3, 2, 1]
+    assert [v["price_per_unit"] for v in vendors] == [365.0, 380.0, 410.0]
     assert all(v["product_name"] == "Urea" and v["unit"] == "bag" for v in vendors)
     assert all(v["is_available"] is True for v in vendors)
     assert {v["delivery_hours"] for v in vendors} == {30.0, 8.0, 12.0}
 
     cheapest = vendors[0]
-    assert cheapest["available_quantity"] == 800
-    assert cheapest["carbon_per_unit"] == 6.5
+    assert cheapest["available_quantity"] == 1200  # Bharat Urea Traders
+    assert cheapest["carbon_per_unit"] == 4.2
 
 
 def test_vendors_can_be_filtered_to_available_only(seeded_client):
     seeded_client.patch("/suppliers/1", json={"is_available": False})
     vendors = seeded_client.get("/vendors", params={"only_available": "true"}).json()
-    assert [v["id"] for v in vendors] == [2, 3]
+    assert [v["id"] for v in vendors] == [3, 2]  # Bharat (365) then GreenFields (380)
     assert len(seeded_client.get("/vendors").json()) == 3
 
 
@@ -105,28 +106,45 @@ def test_vendor_detail_and_missing_vendor(seeded_client):
 # --- /demand ---------------------------------------------------------------
 
 
-def test_demand_reports_the_seeded_shortfall_as_a_violation(seeded_client):
+def test_demand_reports_the_seeded_state_as_healthy(seeded_client):
+    """In the seeded baseline the inbound shipment covers the on-hand gap,
+    so constraint_violated is False even though on-hand stock is below the
+    requirement. This is the correct healthy state for the demo start screen.
+    """
     body = seeded_client.get("/demand").json()
 
     assert body["dealer_id"] == 201
     assert body["dealer_name"] == "Krishi Seva Kendra"
     assert body["required_quantity"] == 1000
     assert body["available_quantity"] == 300
-    assert body["shortage"] == 700
     assert body["deadline"]
 
     assert len(body["active_shipments"]) == 1
     assert body["active_shipments"][0]["id"] == 1
     assert body["active_shipment_quantity"] == 700
 
-    assert body["constraint_violated"] is True
-    assert body["constraint_violations"] == ["shortage of 700 units (300 of 1000 on hand)"]
+    # On-hand shortfall is still reported as a secondary stat.
+    assert body["shortage"] == 700
+    assert body["on_hand_shortfall"] == 700
+
+    # Coverage = 300 on hand + 700 inbound on time = 1000 = requirement.
+    assert body["covered_quantity"] == 1000
+
+    # No genuine violation: coverage meets the requirement and the shipment
+    # arrives before the deadline.
+    assert body["constraint_violated"] is False
+    assert body["constraint_violations"] == []
 
 
 def test_demand_is_satisfied_when_stock_covers_the_requirement(seeded_client):
+    # Cancel the inbound shipment so coverage = on-hand only, then set
+    # required_quantity to match on-hand stock exactly.
+    seeded_client.post("/shipment/1/cancel")
     seeded_client.patch("/dealers/201", json={"required_quantity": 300})
     body = seeded_client.get("/demand").json()
     assert body["shortage"] == 0
+    assert body["on_hand_shortfall"] == 0
+    assert body["covered_quantity"] == 300
     assert body["constraint_violations"] == []
     assert body["constraint_violated"] is False
 
@@ -202,7 +220,7 @@ def test_new_paths_are_read_only_and_typed_in_the_openapi_schema(seeded_client):
         assert "schema" in content
 
     demand = spec["components"]["schemas"]["DemandResponse"]
-    assert {"shortage", "constraint_violated", "constraint_violations"} <= set(
+    assert {"shortage", "on_hand_shortfall", "covered_quantity", "constraint_violated", "constraint_violations"} <= set(
         demand["properties"]
     )
     assert demand["properties"]["constraint_violated"]["readOnly"] is True

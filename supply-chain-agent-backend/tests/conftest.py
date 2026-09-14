@@ -19,6 +19,9 @@ import os
 
 # Must precede the app import below: the limiter reads this at construction.
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+# The system may have DEBUG set to a non-boolean value (e.g. "release" on some
+# Windows machines). Override it to a known-good value before pydantic reads it.
+os.environ["DEBUG"] = "false"
 
 import pytest  # noqa: E402
 
