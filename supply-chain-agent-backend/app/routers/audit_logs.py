@@ -2,6 +2,10 @@
 
 The trail is append-only from the API's point of view: callers can read entries
 and append new ones, but there is deliberately no update or delete route.
+
+Reads are gated with the same guard writes use. These routes mirror
+``GET /audit``'s data — the record of every mutation, with before/after state —
+so leaving them open would make that endpoint's key requirement decorative.
 """
 
 from fastapi import APIRouter, Query, status
@@ -11,7 +15,8 @@ from app.routers.deps import AuditLogServiceDep, LimitQuery, SkipQuery
 from app.schemas.audit_log import AuditLogCreate, AuditLogRead
 from app.security import WRITE_GUARD
 
-router = APIRouter(prefix="/audit-logs", tags=["audit_logs"])
+# Reads are not public either: the trail carries before/after state.
+router = APIRouter(prefix="/audit-logs", tags=["audit_logs"], dependencies=WRITE_GUARD)
 
 
 @router.get("", response_model=list[AuditLogRead], summary="List audit log entries")
@@ -42,7 +47,6 @@ def list_recent_audit_logs(
     response_model=AuditLogRead,
     status_code=status.HTTP_201_CREATED,
     summary="Append an audit log entry",
-    dependencies=WRITE_GUARD,
 )
 def create_audit_log(payload: AuditLogCreate, service: AuditLogServiceDep):
     return service.create(payload)

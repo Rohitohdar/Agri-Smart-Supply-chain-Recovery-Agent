@@ -270,8 +270,57 @@ def test_cheapest_option_is_infeasible_when_it_misses_the_deadline():
 
     assert [option.reference_id for option in plan.options] == [2]
     assert plan.options[0].rank == 1
-    # A lone feasible option is trivially the best: every metric normalizes to 0.
+    # A lone feasible option: single_feasible_option is set and score is 0.
+    assert plan.options[0].single_feasible_option is True
     assert plan.options[0].score == 0.0
+
+
+def test_single_feasible_option_flag_and_raw_metrics():
+    """When exactly one candidate survives filtering, single_feasible_option is
+    True and the raw cost/delivery/carbon figures are preserved unchanged."""
+    plan = evaluate_recovery(
+        state(
+            100,
+            hours=48,
+            suppliers=[
+                supplier(1, 1000, price=10, delivery=100, carbon=1),  # too slow
+                supplier(2, 1000, price=25, delivery=20, carbon=3),   # only survivor
+                supplier(3, 50,   price=5,  delivery=10, carbon=1),   # insufficient stock
+            ],
+        )
+    )
+
+    assert len(plan.options) == 1
+    option = plan.options[0]
+    assert option.reference_id == 2
+    assert option.single_feasible_option is True
+    # Raw metrics are the vendor's own numbers, not normalized.
+    assert option.total_cost == 25 * 100  # price_per_unit * shortage_quantity
+    assert option.total_delivery_hours == 20.0
+    assert option.total_carbon == 3 * 100  # carbon_per_unit * shortage_quantity
+    # Normalized values and contributions are all 0 (no comparison possible).
+    assert option.normalized_cost == 0.0
+    assert option.normalized_delivery_hours == 0.0
+    assert option.normalized_carbon == 0.0
+    assert option.score == 0.0
+    # Two candidates were excluded.
+    assert len(plan.excluded) == 2
+
+
+def test_single_feasible_option_flag_absent_with_multiple_candidates():
+    """single_feasible_option is False when more than one candidate is feasible."""
+    options = optimize_recovery(
+        state(
+            100,
+            suppliers=[
+                supplier(1, 1000, price=10, delivery=10, carbon=1),
+                supplier(2, 1000, price=20, delivery=5,  carbon=2),
+            ],
+        )
+    )
+
+    assert len(options) == 2
+    assert all(not option.single_feasible_option for option in options)
 
 
 def test_a_candidate_landing_exactly_on_the_deadline_is_feasible():
@@ -374,56 +423,55 @@ def test_endpoint_ranks_the_seeded_vendors(seeded_client):
     assert body["hours_available"] == 72.0
     assert body["weights"] == {"cost": 0.4, "delivery_hours": 0.4, "carbon": 0.2}
 
-    # No warehouse holds 700, and GreenFields only has 500, so only the two
-    # vendors that can cover the shortage are ranked.
-    assert [(option["rank"], option["reference_id"], option["action"]) for option in body["options"]] == [
-        (1, 3, "vendor_purchase"),
-        (2, 1, "vendor_purchase"),
-    ]
-    fastest = body["options"][0]
-    assert fastest["label"] == "Bharat Urea Traders"
-    assert fastest["score"] == 0.4
-    assert fastest["total_cost"] == 19950.0
-    assert fastest["normalized_cost"] == 1.0
+    # Reroute shipment #1 via route #4 (11 h, 620 km * 30 = 18600, 62 kg carbon)
+    # beats both vendor_purchase options on cost and delivery, so it ranks first.
+    # Multiple reroute alternatives (routes #2, #3) and vendor options follow.
+    actions = [(o["action"], o["reference_id"]) for o in body["options"]]
+    assert actions[0] == ("reroute_shipment", 1)  # via route #4, cheapest and fastest
 
-    cheapest = body["options"][1]
-    assert cheapest["label"] == "AgroChem Industries"
-    assert cheapest["score"] == 0.6
-    assert cheapest["delivery_contribution"] == 0.4
-    assert cheapest["carbon_contribution"] == 0.2
+    top = body["options"][0]
+    assert top["action"] == "reroute_shipment"
+    assert top["total_cost"] == 18600.0
+    assert top["total_delivery_hours"] == 11.0
+    assert top["score"] == 0.0  # best on all metrics
 
-    excluded = {(item["action"], item["reference_id"]): item["reason"] for item in body["excluded"]}
-    assert excluded[("vendor_purchase", 2)] == "insufficient_quantity"
-    assert excluded[("warehouse_transfer", 103)] == "insufficient_quantity"
+    # Vendor options are present and ranked after the reroute.
+    vendor_actions = [o for o in body["options"] if o["action"] == "vendor_purchase"]
+    assert any(o["reference_id"] == 3 for o in vendor_actions)  # Bharat Urea Traders
 
 
 def test_endpoint_reports_no_feasible_options(seeded_client):
+    # With shortage=5000, warehouses and vendors are excluded on quantity.
+    # Reroute of shipment #1 (700 units) can still be feasible since it delivers
+    # what the shipment has — it is not required to cover the full shortage.
+    # To get a truly empty options list, use a passed deadline.
     body = seeded_client.post(
-        "/optimize/recovery", json={"shortage_quantity": 5000, "deadline": _deadline()}
+        "/optimize/recovery",
+        json={"shortage_quantity": 5000, "deadline": (utcnow() + timedelta(hours=1)).isoformat()},
     ).json()
 
     assert body["options"] == []
-    assert len(body["excluded"]) == 7  # 3 warehouses + 3 vendors + 1 reroute
-    # Warehouses and vendors fail on quantity; the reroute doesn't improve ETA.
     shortage_reasons = {
         item["reason"]
         for item in body["excluded"]
         if item["action"] != "reroute_shipment"
     }
     assert shortage_reasons == {"insufficient_quantity"}
-    reroute_items = [
-        item for item in body["excluded"] if item["action"] == "reroute_shipment"
-    ]
-    assert len(reroute_items) == 1
 
 
 def test_endpoint_reflects_current_database_state(seeded_client):
     request = {"shortage_quantity": 700, "deadline": _deadline()}
-    assert [o["reference_id"] for o in seeded_client.post("/optimize/recovery", json=request).json()["options"]] == [3, 1]
+    options = seeded_client.post("/optimize/recovery", json=request).json()["options"]
+    # Reroute shipment #1 ranks first; vendor_purchase options follow.
+    assert options[0]["action"] == "reroute_shipment"
+    assert options[0]["reference_id"] == 1
 
-    # Failing the winning vendor leaves only AgroChem.
-    seeded_client.post("/simulate/vendor-failure", json={"vendor_id": 3})
-    assert [o["reference_id"] for o in seeded_client.post("/optimize/recovery", json=request).json()["options"]] == [1]
+    # Block all routes so reroute is excluded; only vendor_purchase options remain.
+    for route_id in [1, 2, 3, 4]:
+        seeded_client.post("/simulate/route-block", json={"route_id": route_id})
+    options_no_routes = seeded_client.post("/optimize/recovery", json=request).json()["options"]
+    assert all(o["action"] == "vendor_purchase" for o in options_no_routes)
+    assert options_no_routes[0]["reference_id"] == 3  # Bharat Urea Traders
 
 
 def test_endpoint_is_typed_and_validated(seeded_client):

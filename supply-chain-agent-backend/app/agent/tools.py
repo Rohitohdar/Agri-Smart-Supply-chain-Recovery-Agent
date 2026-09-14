@@ -78,7 +78,8 @@ TOOL_SPECS: Dict[str, tuple[str, str]] = {
         "GET /demand",
     ),
     "optimize_recovery": (
-        "Rank feasible recovery actions for a shortage/deadline. The only place "
+        "Rank feasible recovery actions (warehouse transfer, vendor purchase, "
+        "or shipment reroute) for a shortage/deadline. The only place "
         "cost, delivery and carbon are computed.",
         "POST /optimize/recovery",
     ),

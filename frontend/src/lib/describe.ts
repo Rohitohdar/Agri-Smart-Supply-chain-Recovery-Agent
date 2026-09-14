@@ -312,13 +312,17 @@ function describeOptimize(step: TraceStep): Narrative {
   const options = asArray(record?.options);
   const excluded = asArray(record?.excluded);
   const feasible = options.length > 0;
+  const top = asRecord(options.at(0));
+  const topAction = top ? stringAt(top, "action") : null;
 
   return {
     index: step.index,
     phase: step.phase,
     tone: feasible ? "ok" : "danger",
     title: feasible
-      ? `Optimizer ranked ${formatNumber(options.length)} option(s)`
+      ? `Optimizer ranked ${formatNumber(options.length)} option(s)${
+          topAction ? ` — top: ${actionLabel(topAction)}` : ""
+        }`
       : "No feasible option found",
     detail: describePlan(options.length, excluded.length),
     isAction: false,
@@ -351,7 +355,11 @@ function describeDecide(step: TraceStep, plan: RecoveryPlan | null): Narrative {
     detail: option
       ? `${formatNumber(option.quantity)} units · ${formatCost(option.total_cost)} · ${formatHours(
           option.total_delivery_hours,
-        )} · ${formatCarbon(option.total_carbon)} · score ${formatDecimal(option.score, 2)}.`
+        )} · ${formatCarbon(option.total_carbon)}${
+          option.single_feasible_option
+            ? " · Only one feasible option met the constraints — shown with raw metrics, not a comparative score."
+            : ` · score ${formatDecimal(option.score, 2)}`
+        }.`
       : reasoning,
     isAction: true,
   };

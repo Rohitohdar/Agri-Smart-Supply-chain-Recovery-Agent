@@ -43,8 +43,10 @@ so a lower score is better and the best possible score is 0. Ties are broken
 deterministically by cost, then delivery time, then carbon, then the action name
 and its reference id — so the ranking never depends on dictionary or set order.
 
-If only one candidate is feasible it scores 0: normalization is relative to the
-options actually available, so a lone option is trivially the best one.
+If only one candidate is feasible, normalization is skipped entirely and
+``single_feasible_option`` is set to ``True`` on the returned option. The raw
+cost, delivery and carbon figures are preserved; the score of 0 is not a
+comparative rank and callers should not display it as one.
 """
 
 from __future__ import annotations
@@ -180,6 +182,9 @@ class RankedOption:
     delivery_contribution: float
     carbon_contribution: float
     score: float
+    #: True when this was the only candidate that survived filtering, so all
+    #: normalized values are trivially 0 and the score is not a comparative rank.
+    single_feasible_option: bool = False
 
 
 @dataclass(frozen=True)
@@ -206,10 +211,6 @@ class RecoveryPlan:
     weights: Weights
     options: Sequence[RankedOption]
     excluded: Sequence[ExcludedCandidate]
-    #: Reroute candidates that improve delivery time, ranked separately.
-    #: These do not add supply — they change when existing supply arrives —
-    #: so they are not mixed into the main shortage-filling ranking.
-    reroute_options: Sequence[RankedOption] = ()
 
 
 # --- internals -------------------------------------------------------------
@@ -426,7 +427,8 @@ def _feasibility(
             delivery_hours=candidate.total_delivery_hours,
             hours_available=round(hours_available, _HOURS_DIGITS),
         )
-    # For reroute candidates, the new route must be faster than the current one.
+    # A reroute is only a recovery action when the new route is faster than the
+    # current ETA — otherwise it does not improve the situation.
     if (
         candidate.action == RecoveryAction.REROUTE_SHIPMENT
         and candidate.current_delivery_hours is not None
@@ -457,6 +459,31 @@ def _normalize(values: Sequence[float], value: float) -> float:
 def _rank(
     candidates: Sequence[_Candidate], weights: Weights
 ) -> tuple[RankedOption, ...]:
+    # When only one candidate survived filtering, min-max normalization is
+    # trivially 0 for every metric and the score of 0 is not a comparative rank.
+    # Skip normalization and flag the option so callers can say so explicitly.
+    if len(candidates) == 1:
+        c = candidates[0]
+        return (RankedOption(
+            rank=1,
+            action=c.action,
+            reference_id=c.reference_id,
+            label=c.label,
+            quantity=c.quantity,
+            route_id=c.route_id,
+            total_cost=c.total_cost,
+            total_delivery_hours=c.total_delivery_hours,
+            total_carbon=c.total_carbon,
+            normalized_cost=0.0,
+            normalized_delivery_hours=0.0,
+            normalized_carbon=0.0,
+            cost_contribution=0.0,
+            delivery_contribution=0.0,
+            carbon_contribution=0.0,
+            score=0.0,
+            single_feasible_option=True,
+        ),)
+
     costs = [candidate.total_cost for candidate in candidates]
     deliveries = [candidate.total_delivery_hours for candidate in candidates]
     carbons = [candidate.total_carbon for candidate in candidates]
@@ -519,7 +546,14 @@ def _rank(
 def evaluate_recovery(
     state: RecoveryState, weights: Weights = DEFAULT_WEIGHTS
 ) -> RecoveryPlan:
-    """Rank every feasible candidate and report the excluded ones."""
+    """Rank every feasible candidate and report the excluded ones.
+
+    All three action types — warehouse_transfer, vendor_purchase, and
+    reroute_shipment — compete in the same ranking. A reroute is only feasible
+    when the new route delivers faster than the shipment's current ETA, so it
+    only surfaces as the top option when it is genuinely the best recovery action
+    for the detected violation.
+    """
     hours_available = _hours_available(state)
 
     if state.shortage_quantity <= 0:
@@ -530,58 +564,19 @@ def evaluate_recovery(
             weights=weights,
             options=(),
             excluded=(),
-            reroute_options=(),
         )
 
     candidates, excluded = _generate(state)
 
-    # Separate reroute candidates from shortage-filling candidates.
-    reroute_cands: list[_Candidate] = []
-    shortage_cands: list[_Candidate] = []
-    for candidate in candidates:
-        if candidate.action == RecoveryAction.REROUTE_SHIPMENT:
-            reroute_cands.append(candidate)
-        else:
-            shortage_cands.append(candidate)
-
-    # Rank shortage-filling candidates.
+    # Rank all candidates together — reroute_shipment competes on equal terms
+    # with warehouse_transfer and vendor_purchase as a primary recovery action.
     feasible: list[_Candidate] = []
-    for candidate in shortage_cands:
+    for candidate in candidates:
         rejection = _feasibility(candidate, hours_available)
         if rejection is None:
             feasible.append(candidate)
         else:
             excluded.append(rejection)
-
-    # Rank reroute candidates separately.  A reroute is feasible only when the
-    # new route delivers faster than the current ETA (the shipment is delayed
-    # or on a suboptimal path).
-    reroute_feasible: list[_Candidate] = []
-    for candidate in reroute_cands:
-        # Always check deadline feasibility.
-        rejection = _feasibility(candidate, hours_available)
-        if rejection is not None:
-            excluded.append(rejection)
-            continue
-        # Reroute must improve on the current ETA.
-        if (
-            candidate.current_delivery_hours is not None
-            and candidate.total_delivery_hours >= candidate.current_delivery_hours
-        ):
-            excluded.append(
-                ExcludedCandidate(
-                    action=candidate.action,
-                    reference_id=candidate.reference_id,
-                    label=candidate.label,
-                    quantity=candidate.quantity,
-                    reason=ExclusionReason.MISSES_DEADLINE,
-                    available_quantity=candidate.available_quantity,
-                    delivery_hours=candidate.total_delivery_hours,
-                    hours_available=round(candidate.current_delivery_hours, _HOURS_DIGITS),
-                )
-            )
-            continue
-        reroute_feasible.append(candidate)
 
     excluded.sort(key=lambda item: (item.action.value, item.reference_id))
     return RecoveryPlan(
@@ -591,7 +586,6 @@ def evaluate_recovery(
         weights=weights,
         options=_rank(feasible, weights),
         excluded=tuple(excluded),
-        reroute_options=_rank(reroute_feasible, weights),
     )
 
 

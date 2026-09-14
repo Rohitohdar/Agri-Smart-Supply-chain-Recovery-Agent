@@ -21,13 +21,13 @@ router = APIRouter(prefix="/optimize", tags=["optimize"])
     response_model=RecoveryPlanResponse,
     summary="Rank recovery options for a shortage",
     description=(
-        "Enumerates candidate recovery actions (warehouse transfers and vendor "
-        "purchases), filters out those that cannot cover the shortage or miss "
-        "the deadline, and ranks the rest by ``0.4 * normalized cost + 0.4 * "
-        "normalized delivery hours + 0.2 * normalized carbon`` (lower is "
-        "better). The response carries the raw metrics, the normalized values, "
-        "each weighted contribution and the final score, plus the candidates "
-        "that were filtered out and the numbers that filtered them."
+        "Enumerates candidate recovery actions (warehouse transfers, vendor "
+        "purchases, and shipment reroutes), filters out those that cannot cover "
+        "the shortage or miss the deadline, and ranks the rest by ``0.4 * "
+        "normalized cost + 0.4 * normalized delivery hours + 0.2 * normalized "
+        "carbon`` (lower is better). The response carries the raw metrics, the "
+        "normalized values, each weighted contribution and the final score, plus "
+        "the candidates that were filtered out and the numbers that filtered them."
     ),
 )
 @limiter.limit(OPTIMIZE_LIMIT)

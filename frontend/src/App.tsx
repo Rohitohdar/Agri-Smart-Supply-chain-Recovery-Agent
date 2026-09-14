@@ -154,7 +154,20 @@ export function App() {
         : "Degraded"
       : snapshotData?.demand.constraint_violated
         ? "Constraint violated"
-        : "All clear";
+        : "Healthy";
+
+  const heroIcon = !reachable ? "⚠️" : overallTone === "danger" ? "🔴" : overallTone === "warn" ? "🟡" : "🟢";
+  const heroSub = !reachable
+    ? "Cannot reach the backend — check the URL in the Connection panel."
+    : snapshotData?.demand.constraint_violated
+      ? `${snapshotData.demand.dealer_name} is short by ${snapshotData.demand.on_hand_shortfall.toLocaleString()} units — the agent needs to act.`
+      : activeCount > 0
+        ? `${activeCount} disruption(s) injected — the system is degraded but the constraint is not yet violated.`
+        : snapshotData
+          ? `${snapshotData.demand.dealer_name} has enough supply arriving on time — no action needed.`
+          : "Waiting for data…";
+
+  const hasEverRun = agent.state.run !== null || agent.state.status !== "idle";
 
   return (
     <div className="console">
@@ -178,9 +191,20 @@ export function App() {
           <span className="muted">
             {pollMs === 0 ? "Polling paused" : reachable ? "Live" : "Offline"}
           </span>
-          <StatusPill tone={overallTone}>{overallLabel}</StatusPill>
         </div>
       </header>
+
+      {/* Hero status banner — the single highest-contrast element on the page */}
+      <div className={`hero hero--${overallTone}`} role="status" aria-live="polite">
+        <span className="hero__icon" aria-hidden="true">{heroIcon}</span>
+        <div className="hero__body">
+          <div className={`hero__label hero__label--${overallTone}`}>{overallLabel}</div>
+          <div className="hero__sub">{heroSub}</div>
+        </div>
+        <div className="hero__meta">
+          <StatusPill tone={overallTone}>{overallLabel}</StatusPill>
+        </div>
+      </div>
 
       {snapshot.error !== null ? (
         <p className="notice notice--danger">
@@ -222,6 +246,7 @@ export function App() {
             revealedCount={agent.state.revealedCount}
             canRun={blockedReason === null}
             blockedReason={blockedReason}
+            hasEverRun={hasEverRun}
             onRun={() => void agent.start(snapshotData?.demand ?? null)}
             onSkip={agent.revealAll}
             onClear={agent.clear}

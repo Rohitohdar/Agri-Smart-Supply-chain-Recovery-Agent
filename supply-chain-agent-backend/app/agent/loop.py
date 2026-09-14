@@ -342,17 +342,6 @@ class RecoveryAgent:
                 self.trace.add(AgentPhase.GUARDRAIL, note=str(exc))
                 outcome = AgentOutcome.TOOL_CALL_LIMIT_REACHED
 
-            # After the main loop, check if a reroute would improve delivery.
-            # Reroute is a separate concern from shortage-filling: it changes
-            # when existing supply arrives, not how much supply exists.
-            if outcome in (
-                AgentOutcome.RESOLVED,
-                AgentOutcome.NO_ACTION_NEEDED,
-                AgentOutcome.NO_FEASIBLE_OPTION,
-            ):
-                reroute_result = self._try_reroute(plan, actions, audit_log_ids)
-                if reroute_result is not None:
-                    outcome, verify = reroute_result
         else:
             outcome = AgentOutcome.NO_ACTION_NEEDED
 
@@ -495,102 +484,6 @@ class RecoveryAgent:
         if isinstance(data, dict):
             return data.get("audit_log_id")
         return None
-
-    def _try_reroute(
-        self,
-        plan: Optional[Dict[str, Any]],
-        actions: List[Dict[str, Any]],
-        audit_log_ids: List[int],
-    ) -> Optional[Tuple[AgentOutcome, Optional[Dict[str, Any]]]]:
-        """Check if a reroute would improve delivery and execute it.
-
-        Reroute is separate from shortage-filling: it changes *when* existing
-        supply arrives, not *how much* supply exists.  This runs after the main
-        loop and only acts when the optimizer surfaced a feasible reroute that
-        improves on the current ETA.
-        """
-        reroute_options = (plan or {}).get("reroute_options", [])
-        if not reroute_options:
-            return None
-
-        top_reroute = reroute_options[0]
-        self.trace.add(
-            AgentPhase.REROUTE,
-            result={"reroute_options": reroute_options},
-            note=(
-                f"reroute candidate available: shipment {top_reroute['reference_id']} "
-                f"via route {top_reroute.get('route_id')} "
-                f"(delivery {top_reroute['total_delivery_hours']}h, "
-                f"score {top_reroute['score']})"
-            ),
-        )
-
-        # Build and authorise a reroute decision.
-        decision_raw = {
-            "action": "reroute_shipment",
-            "params": {
-                "reference_id": top_reroute["reference_id"],
-                "quantity": top_reroute["quantity"],
-                "shipment_id": top_reroute["reference_id"],
-                "new_route_id": top_reroute.get("route_id"),
-            },
-            "reasoning": (
-                f"Reroute shipment {top_reroute['reference_id']} to route "
-                f"{top_reroute.get('route_id')} for faster delivery "
-                f"({top_reroute['total_delivery_hours']}h, score {top_reroute['score']})."
-            ),
-        }
-        try:
-            decision = ActionDecision.model_validate(decision_raw)
-        except ValidationError as exc:
-            self.trace.add(
-                AgentPhase.DECIDE,
-                result={"raw": decision_raw, "errors": str(exc)},
-                note="reroute decision failed schema validation",
-            )
-            return None
-
-        # Set up authorisation context for the reroute.
-        self._optimized_this_cycle = True
-        self._top_option = top_reroute
-
-        rejection = self._authorise(decision)
-        if rejection is not None:
-            self.trace.add(
-                AgentPhase.GUARDRAIL,
-                result={
-                    "decision": decision.model_dump(),
-                    "top_option": {
-                        "action": top_reroute["action"],
-                        "reference_id": top_reroute["reference_id"],
-                        "quantity": top_reroute["quantity"],
-                    },
-                },
-                note=f"reroute refused: {rejection}",
-            )
-            return None
-
-        # Execute the reroute via _call with REROUTE phase.
-        tool, arguments = self._tool_for(decision, {})
-        execution = self._call(AgentPhase.REROUTE, tool, **arguments)
-        actions.append(
-            {
-                "tool": execution.name,
-                "arguments": self.trace.steps[-1].arguments,
-                "ok": execution.ok,
-                "error": execution.error,
-                "reason": execution.reason,
-                "result": execution.data,
-            }
-        )
-        if execution.ok:
-            audit_id = self._audit_id(execution.data)
-            if audit_id is not None:
-                audit_log_ids.append(audit_id)
-
-        # Re-verify after the reroute.
-        verify = self._call(AgentPhase.REROUTE, "verify_state").data
-        return (AgentOutcome.RESOLVED, verify) if (verify and verify["satisfied"]) else None
 
     def _explain(
         self, context: ExplanationContext

@@ -8,6 +8,7 @@ import type { RunStatus } from "../state/useAgentRun";
 import { JsonDetails } from "./JsonDetails";
 import { StatusPill } from "./StatusPill";
 
+const PHASES = ["observe", "detect", "investigate", "optimize", "decide", "execute", "verify"] as const;
 const PHASE_LABELS: Record<string, string> = {
   observe: "OBSERVE",
   detect: "DETECT",
@@ -19,6 +20,61 @@ const PHASE_LABELS: Record<string, string> = {
   guardrail: "GUARDRAIL",
 };
 
+function PhaseStepper({ currentPhase }: { currentPhase: string | null }) {
+  return (
+    <div className="stepper" role="list" aria-label="Agent reasoning phases">
+      {PHASES.map((phase, i) => {
+        const phaseIndex = PHASES.indexOf(phase as typeof PHASES[number]);
+        const currentIndex = currentPhase ? PHASES.indexOf(currentPhase as typeof PHASES[number]) : -1;
+        const isDone = currentIndex > phaseIndex;
+        const isActive = currentPhase === phase || (currentIndex === -1 && i === 0);
+        return (
+          <div key={phase} className="stepper__step" role="listitem">
+            {i > 0 && <span className="stepper__arrow" aria-hidden="true">›</span>}
+            <span
+              className={`stepper__label${isActive ? " stepper__label--active" : isDone ? " stepper__label--done" : ""}`}
+              aria-current={isActive ? "step" : undefined}
+            >
+              {PHASE_LABELS[phase]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FirstRunGuide() {
+  return (
+    <div className="guide">
+      <p className="muted">Follow these three steps to run a demo:</p>
+      <div className="guide__steps">
+        <div className="guide__step">
+          <div className="guide__num" aria-hidden="true">1</div>
+          <div className="guide__text">
+            <strong>Reset scenario</strong>
+            <span>Use the Connection panel to restore the seeded starting state.</span>
+          </div>
+        </div>
+        <div className="guide__step">
+          <div className="guide__num" aria-hidden="true">2</div>
+          <div className="guide__text">
+            <strong>Inject a disruption</strong>
+            <span>Delay a shipment, block a route, or disable a vendor below.</span>
+          </div>
+        </div>
+        <div className="guide__step">
+          <div className="guide__num" aria-hidden="true">3</div>
+          <div className="guide__text">
+            <strong>Run recovery</strong>
+            <span>Press the button above — the agent will observe, decide, and act.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentFeed({
   run,
   narratives,
@@ -27,6 +83,7 @@ export function AgentFeed({
   revealedCount,
   canRun,
   blockedReason,
+  hasEverRun,
   onRun,
   onSkip,
   onClear,
@@ -38,6 +95,7 @@ export function AgentFeed({
   revealedCount: number;
   canRun: boolean;
   blockedReason: string | null;
+  hasEverRun: boolean;
   onRun: () => void;
   onSkip: () => void;
   onClear: () => void;
@@ -46,11 +104,13 @@ export function AgentFeed({
   const running = status === "running";
   const revealing = status === "done" && run !== null && revealedCount < run.trace.length;
   const visible = narratives.slice(0, revealedCount);
-  // Keyed by the step's own index rather than by array position, so a trace that
-  // ever arrives out of order still pairs each sentence with its own payload.
   const traceByIndex = new Map((run?.trace ?? []).map((step) => [step.index, step]));
 
-  // Follow the newest step, like a log tail.
+  // Current phase: the last revealed step's phase while revealing, or null while running
+  const currentPhase = running
+    ? (visible.at(-1)?.phase ?? null)
+    : null;
+
   useEffect(() => {
     const node = logRef.current;
     if (node) node.scrollTop = node.scrollHeight;
@@ -71,6 +131,7 @@ export function AgentFeed({
             className="button button--primary"
             disabled={!canRun || running}
             title={blockedReason ?? "Observe, decide, act, verify — one pass"}
+            aria-label={running ? "Agent is working" : "Run recovery agent"}
             onClick={onRun}
           >
             {running ? "Agent working…" : "Run recovery"}
@@ -81,7 +142,12 @@ export function AgentFeed({
             </button>
           ) : null}
           {run || error ? (
-            <button type="button" className="button button--ghost" onClick={onClear}>
+            <button
+              type="button"
+              className="button button--ghost"
+              aria-label="Clear agent run results"
+              onClick={onClear}
+            >
               Clear
             </button>
           ) : null}
@@ -90,7 +156,11 @@ export function AgentFeed({
 
       {blockedReason ? <p className="notice notice--warn">{blockedReason}</p> : null}
 
-      {status === "idle" ? (
+      {/* First-run guide — only shown before any run has ever been attempted */}
+      {status === "idle" && !hasEverRun ? <FirstRunGuide /> : null}
+
+      {/* Idle state after a clear */}
+      {status === "idle" && hasEverRun ? (
         <div className="empty">
           <p>
             <strong>Run recovery</strong> asks the agent to look at the current state and fix a
@@ -98,19 +168,18 @@ export function AgentFeed({
             optimize, execute, verify — and every tool call it makes will appear here in plain
             language, with the raw response behind <em>view details</em>.
           </p>
-          <p className="muted">
-            The agent never computes cost, delivery or carbon itself, and cannot invent a number:
-            those come from the optimizer, and its closing summary is checked against the tool
-            results before you see it.
-          </p>
         </div>
       ) : null}
 
+      {/* Phase stepper — shown while the request is in flight */}
       {running ? (
-        <p className="feed-status" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
-          Agent is observing the system and reasoning about a response…
-        </p>
+        <div>
+          <PhaseStepper currentPhase={currentPhase} />
+          <p className="feed-status" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            Agent is reasoning — results will appear when complete…
+          </p>
+        </div>
       ) : null}
 
       {status === "error" ? (

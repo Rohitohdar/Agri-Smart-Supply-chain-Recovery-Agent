@@ -148,9 +148,9 @@ this scenario (also what `python -m app.db.seed` does):
 
   | id | name | price/unit | qty | delivery | carbon/unit |
   |---|---|---|---|---|---|
-  | 1 | AgroChem Industries | 24.90 (cheapest) | 800 | 30 h (slowest) | 6.5 (dirtiest) |
-  | 2 | GreenFields Fertilizers | 26.75 | 500 | 8 h (fastest) | 2.8 (greenest) |
-  | 3 | Bharat Urea Traders | 28.50 (priciest) | 1200 | 12 h | 4.2 |
+  | 1 | AgroChem Industries | ₹410/bag (highest) | 800 | 30 h (slowest) | 6.5 (dirtiest) |
+  | 2 | GreenFields Fertilizers | ₹380/bag | 500 | 8 h (fastest) | 2.8 (greenest) |
+  | 3 | Bharat Urea Traders | ₹365/bag (lowest) | 1200 | 12 h | 4.2 |
 
 * **Warehouses** (3, different stock): Central Depot / Nagpur = 450 bags,
   North Hub / Ludhiana = 120 bags, East Yard / Kolkata = 600 bags.
@@ -333,7 +333,7 @@ read *view*; `/suppliers` remains the CRUD resource.
     "product_id": 1,
     "product_name": "Urea",
     "unit": "bag",
-    "price_per_unit": 24.9,
+    "price_per_unit": 410.0,
     "available_quantity": 800,
     "delivery_hours": 30.0,
     "carbon_per_unit": 6.5,
@@ -345,7 +345,7 @@ read *view*; `/suppliers` remains the CRUD resource.
     "product_id": 1,
     "product_name": "Urea",
     "unit": "bag",
-    "price_per_unit": 26.75,
+    "price_per_unit": 380.0,
     "available_quantity": 500,
     "delivery_hours": 8.0,
     "carbon_per_unit": 2.8,
@@ -560,7 +560,7 @@ scheduled to arrive after the vendor's `delivery_hours`.
 
 ```json
 {
-  "vendor": {"id": 1, "name": "AgroChem Industries", "product_id": 1, "product_name": "Urea", "unit": "bag", "price_per_unit": 24.9, "available_quantity": 600, "delivery_hours": 30.0, "carbon_per_unit": 6.5, "is_available": true},
+  "vendor": {"id": 1, "name": "AgroChem Industries", "product_id": 1, "product_name": "Urea", "unit": "bag", "price_per_unit": 410.0, "available_quantity": 600, "delivery_hours": 30.0, "carbon_per_unit": 6.5, "is_available": true},
   "vendor_available_before": 800,
   "shipment": {"product_id": 1, "from_id": 1, "to_id": 201, "quantity": 200, "status": "PENDING", "expected_arrival": "2026-09-14T16:32:10.673702", "actual_arrival": null, "delay_hours": 0.0, "id": 2},
   "audit_log_id": 2
@@ -660,7 +660,7 @@ the pushed ETA passes the dealer's deadline, `GET /demand` reports the
 
 ```json
 {
-  "vendor": {"id": 2, "name": "GreenFields Fertilizers", "product_id": 1, "product_name": "Urea", "unit": "bag", "price_per_unit": 26.75, "available_quantity": 500, "delivery_hours": 8.0, "carbon_per_unit": 2.8, "is_available": false},
+  "vendor": {"id": 2, "name": "GreenFields Fertilizers", "product_id": 1, "product_name": "Urea", "unit": "bag", "price_per_unit": 380.0, "available_quantity": 500, "delivery_hours": 8.0, "carbon_per_unit": 2.8, "is_available": false},
   "previous_is_available": true,
   "audit_log_id": 2
 }
@@ -780,17 +780,17 @@ For the seeded 700-bag shortage with a 72-hour deadline:
   "options": [
     {
       "rank": 1, "action": "vendor_purchase", "reference_id": 3, "label": "Bharat Urea Traders", "quantity": 700, "route_id": null,
-      "total_cost": 19950.0, "total_delivery_hours": 12.0, "total_carbon": 2940.0,
-      "normalized_cost": 1.0, "normalized_delivery_hours": 0.0, "normalized_carbon": 0.0,
-      "cost_contribution": 0.4, "delivery_contribution": 0.0, "carbon_contribution": 0.0,
-      "score": 0.4
+      "total_cost": 255500.0, "total_delivery_hours": 12.0, "total_carbon": 2940.0,
+      "normalized_cost": 0.0, "normalized_delivery_hours": 0.0, "normalized_carbon": 0.0,
+      "cost_contribution": 0.0, "delivery_contribution": 0.0, "carbon_contribution": 0.0,
+      "score": 0.0
     },
     {
       "rank": 2, "action": "vendor_purchase", "reference_id": 1, "label": "AgroChem Industries", "quantity": 700, "route_id": null,
-      "total_cost": 17430.0, "total_delivery_hours": 30.0, "total_carbon": 4550.0,
-      "normalized_cost": 0.0, "normalized_delivery_hours": 1.0, "normalized_carbon": 1.0,
-      "cost_contribution": 0.0, "delivery_contribution": 0.4, "carbon_contribution": 0.2,
-      "score": 0.6
+      "total_cost": 287000.0, "total_delivery_hours": 30.0, "total_carbon": 4550.0,
+      "normalized_cost": 1.0, "normalized_delivery_hours": 1.0, "normalized_carbon": 1.0,
+      "cost_contribution": 0.4, "delivery_contribution": 0.4, "carbon_contribution": 0.2,
+      "score": 1.0
     }
   ],
   "excluded": [
@@ -970,8 +970,8 @@ For the seeded scenario (no body needed; `{"max_replans": n}` is optional):
   "tool_calls": 9,
   "audit_log_ids": [2, 3],
   "grounding": {"attempts": 1, "rejected_numbers": [], "regenerated": false, "fallback_used": false, "fallback_reason": null},
-  "explanation": "Dealer Krishi Seva Kendra (201) requires 1000 units by 2026-09-16T10:48:30.463703 and holds 300, a shortage of 700 with 700 units already inbound (constraint_violations=[\"shortage of 700 units (300 of 1000 on hand)\"]). The optimizer ranked vendor_purchase from Bharat Urea Traders (reference_id 3) first for 700 units: cost 19950.0, delivery 12.0 h, carbon 2940.0, score 0.4. Executed purchase_from_vendor({\"vendor_id\": 3, \"quantity\": 700}), which created shipment 2 of 700 units from Bharat Urea Traders arriving 2026-09-13T22:48:30.492105 and left vendor availability at 500 (was 1200). Verification: satisfied=true — on hand 300 plus 1400 inbound by the deadline is 1700 against a requirement of 1000, with late shipments [].",
-  "verify": {"required_quantity": 1000, "available_quantity": 300, "on_time_inbound_quantity": 1400, "covered_quantity": 1700, "satisfied": true, "late_shipment_ids": [], "unknown_eta_shipment_ids": [], "constraint_violated": true, "shortage": 700}
+  "explanation": "Dealer Krishi Seva Kendra (201) requires 1000 units by 2026-09-16T10:48:30.463703 and holds 300, a shortage of 700 after a disrupted shipment misses the deadline. The optimizer ranked vendor_purchase from Bharat Urea Traders (reference_id 3) first for 700 units: cost 255500.0, delivery 12.0 h, carbon 2940.0, score 0.0. Executed purchase_from_vendor({\"vendor_id\": 3, \"quantity\": 700}), which created shipment 2 of 700 units from Bharat Urea Traders arriving 2026-09-13T22:48:30.492105 and left vendor availability at 500 (was 1200). Verification: satisfied=true — on hand 300 plus 700 inbound by the deadline is 1000 against a requirement of 1000, with late shipments [1].",
+  "verify": {"required_quantity": 1000, "available_quantity": 300, "on_time_inbound_quantity": 700, "covered_quantity": 1000, "satisfied": true, "late_shipment_ids": [1], "unknown_eta_shipment_ids": [], "constraint_violated": true, "shortage": 700}
 }
 ```
 
@@ -1011,7 +1011,7 @@ The `optimize_recovery` step's raw result is the Step 5 payload verbatim, which
 is where every cost/delivery/carbon figure in the explanation came from:
 
 ```json
-{"options": [{"rank": 1, "action": "vendor_purchase", "reference_id": 3, "label": "Bharat Urea Traders", "quantity": 700, "total_cost": 19950.0, "total_delivery_hours": 12.0, "total_carbon": 2940.0, "score": 0.4, "…": "…"}], "excluded": ["…"]}
+{"options": [{"rank": 1, "action": "vendor_purchase", "reference_id": 3, "label": "Bharat Urea Traders", "quantity": 700, "total_cost": 255500.0, "total_delivery_hours": 12.0, "total_carbon": 2940.0, "score": 0.0, "…": "…"}], "excluded": ["…"]}
 ```
 
 #### A note on `satisfied` vs `constraint_violated`
@@ -1036,19 +1036,15 @@ A short summary; [`SECURITY.md`](SECURITY.md) has the full measures and the
 reasoning behind each.
 
 **Authentication.** Every state-changing endpoint — the action routes, all four
-`/simulate/*` triggers, `POST /agent/recover`, `POST /admin/reset`,
-`POST /audit-logs` and every CRUD write (**34 operations in total**) — requires
-the server's API key in the `X-API-Key` header, as does `GET /audit`. Reads stay
-open for the dashboard. The key is compared in constant time and checked *before*
-the body is validated, so a malformed request cannot probe which ids exist. Set it
-with `API_KEY`; unset is permitted only when `ENVIRONMENT` is `development` or
-`test`, so any other deployment refuses to start without one.
-
-One inconsistency is still open, and worth naming rather than glossing: the raw
-audit-log CRUD reads (`GET /audit-logs`, `/audit-logs/recent`,
-`/audit-logs/{id}`) are **not** gated, so the same trail that `GET /audit`
-protects is reachable ungated through those aliases. Gating them — or dropping
-them in favour of `/audit` — is the outstanding fix.
+`/simulate/*` triggers, `POST /agent/recover`, `POST /admin/reset`, and every
+crud write (**34 operations in total**) — requires the server's API key in the
+`X-API-Key` header, as does the whole audit trail: `GET /audit` and the raw
+`/audit-logs` reads (the trail carries before/after state, so it is never
+public). Dashboard reads stay open. The key is compared in constant time and
+checked *before* the body is validated, so a malformed request cannot probe
+which ids exist. Set it with `API_KEY`; unset is permitted only when
+`ENVIRONMENT` is `development` or `test`, so any other deployment refuses to
+start without one.
 
 ```bash
 curl -X POST localhost:8000/inventory/transfer \
@@ -1211,15 +1207,15 @@ response, so the numbers quoted are the ones the trail recorded.
 ```text
   RUN  DISRUPTION                        OUTCOME                    COVER  REPLAN  CALLS        COST   HOURS     CARBON     WALL
   ---  --------------------------------  -------------------------  -----  ------  -----  ----------  ------  ---------  -------
-    1  shipment_delay 31.4h              resolved                   yes         0      9      19,950    12.0      2,940    0.04s
-    2  shipment_delay 85h                resolved                   yes         0      9      19,950    12.0      2,940    0.04s
+    1  shipment_delay 31.4h              resolved                   yes         0      9     255,500    12.0      2,940    0.04s
+    2  shipment_delay 85h                resolved                   yes         0      9     255,500    12.0      2,940    0.04s
     3  demand_spike -> 2171              no_feasible_option          NO          0      7           0     0.0          0    0.04s
     4  demand_spike -> 1953              no_feasible_option          NO          0      7           0     0.0          0    0.04s
-    5  vendor_failure #1 AgroChem Ind.   resolved                   yes         0      9      19,950    12.0      2,940    0.04s
-    6  shipment_delay 11.5h              resolved                   yes         0      9      19,950    12.0      2,940    0.05s
-    7  shipment_delay 43.7h              resolved                   yes         0      9      19,950    12.0      2,940    0.05s
+    5  vendor_failure #1 AgroChem Ind.   resolved                   yes         0      9     255,500    12.0      2,940    0.04s
+    6  shipment_delay 11.5h              resolved                   yes         0      9     255,500    12.0      2,940    0.05s
+    7  shipment_delay 43.7h              resolved                   yes         0      9     255,500    12.0      2,940    0.05s
     8  demand_spike -> 1693              no_feasible_option          NO          0      7           0     0.0          0    0.03s
-  TOTAL                                                            5/8         0    8.2      99,750    60.0     14,700     1.9s
+  TOTAL                                                            5/8         0    8.2   1,277,500    60.0     14,700     1.9s
 
   AGENT OUTCOME DISTRIBUTION
   resolved               |##################################|   5   62.5%
@@ -1232,8 +1228,8 @@ response, so the numbers quoted are the ones the trail recorded.
   Average tool calls         8.2 per run
 
   COST / DELIVERY / CARBON PER RUN
-  average      cost   12,468.8   delivery    7.5 h   carbon   1,837.5
-  total        cost   99,750.0   delivery    60.0 h   carbon  14,700.0
+  average      cost  159,687.5   delivery    7.5 h   carbon   1,837.5
+  total        cost 1,277,500.0  delivery    60.0 h   carbon  14,700.0
 
   FAILED / REJECTED ACTIONS (read back from GET /audit)
   - run 3: outcome=no_feasible_option (shortage 1871, replans 0, tool_calls 7): the optimizer
@@ -1249,7 +1245,7 @@ Read those numbers with their caveats attached, which
 
 * **The success rate flatters the agent.** A run counts as a success whenever the
   requirement ends up covered — including runs where it was *already* covered
-  before the agent acted. Every resolved run cost an identical 19,950 for exactly
+before the agent acted. Every resolved run cost an identical 255,500 for exactly
   that reason.
 * **All three failures are demand spikes**, and all three are the honest-refusal
   path, not crashes: candidates are sized to the whole shortfall and must be

@@ -28,7 +28,6 @@ class AgentPhase(str, enum.Enum):
     DECIDE = "decide"
     EXECUTE = "execute"
     VERIFY = "verify"
-    REROUTE = "reroute"
     GUARDRAIL = "guardrail"
 
 

@@ -13,9 +13,12 @@ each one, and — just as importantly — what is deliberately left open.
 `X-API-Key` header. That is 32 operations: the action routes
 (`/inventory/transfer`, `/shipment/{id}/reroute`, `/vendor/{id}/purchase`,
 `/shipment/{id}/cancel`), all four `/simulate/*` triggers, `POST /agent/recover`,
-`POST /admin/reset`, `POST /audit-logs`, and every CRUD write
+`POST /admin/reset`, and every CRUD write
 (`POST`/`PATCH`/`DELETE`/`PUT` on products, suppliers, warehouses, dealers,
-routes and shipments). `GET /audit` is also gated.
+routes and shipments). The audit trail is also gated: `GET /audit` and the raw
+`/audit-logs` reads (`/audit-logs`, `/audit-logs/recent`, `/audit-logs/{id}`) —
+the trail carries before/after state, so serving it through an ungated alias
+would make `GET /audit`'s key requirement decorative.
 
 **How.** `app/security.py` exposes a single dependency, `require_api_key`, and
 the constant list `WRITE_GUARD`. Routers that are entirely mutating
@@ -31,8 +34,9 @@ raises at startup. So a shared or production deployment cannot boot
 unauthenticated by accident — it fails loudly instead.
 
 **Open reads.** `GET` endpoints are open on purpose so the demo dashboard can
-poll them without holding a key. `POST /optimize/recovery` is also open: it
-computes a ranking and mutates nothing. Both are rate-limited.
+poll them without holding a key — except the audit trail, which is read-only
+but not public (see above). `POST /optimize/recovery` is also open: it
+computes a ranking and mutates nothing. All of them are rate-limited.
 
 ## 2. Rate limiting
 

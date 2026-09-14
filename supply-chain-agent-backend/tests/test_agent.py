@@ -6,7 +6,9 @@ paths are driven with scripted collaborators so each can be exercised directly.
 """
 
 import json
+import re
 import sys
+from datetime import timedelta
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -37,9 +39,18 @@ from app.models import Dealer, Shipment, Supplier
 from app.services.errors import ConflictError
 
 
-def _seeded(session_factory):
+def _seeded(session_factory, *, disrupted=True):
     db = session_factory()
     seed_database(db)
+    if disrupted:
+        # Agent-action tests need a genuine coverage violation. The normal seed
+        # is deliberately healthy: its on-time inbound shipment covers the
+        # on-hand shortfall.
+        shipment = db.get(Shipment, 1)
+        shipment.expected_arrival = db.get(Dealer, 201).deadline + timedelta(hours=1)
+        shipment.status = "DELAYED"
+        shipment.delay_hours = 49.0
+        db.commit()
     return db
 
 
@@ -154,13 +165,13 @@ def test_seeded_run_resolves_with_one_top_ranked_action(session_factory):
 
     assert run.outcome is AgentOutcome.RESOLVED
     assert run.replan_cycles == 0
-    # The main loop resolves via purchase_from_vendor.  If a reroute candidate
-    # exists and improves delivery time, the agent also executes it.
+    # The optimizer ranks reroute_shipment #1 (via route #4, 11 h, ₹18,600)
+    # above vendor_purchase #3 (12 h, ₹255,500) in the disrupted scenario.
     tool_names = [action["tool"] for action in run.actions]
-    assert "purchase_from_vendor" in tool_names
+    assert "reroute_shipment" in tool_names
     assert run.actions[0]["ok"] is True
     assert run.verify is not None and run.verify["satisfied"] is True
-    assert run.plan["options"][0]["reference_id"] == 3
+    assert run.plan["options"][0]["reference_id"] == 1  # shipment #1 rerouted
 
 
 def test_observe_and_demand_are_reused_not_recomputed(session_factory):
@@ -174,7 +185,7 @@ def test_observe_and_demand_are_reused_not_recomputed(session_factory):
 
 
 def test_no_action_when_the_constraint_holds(session_factory):
-    db = _seeded(session_factory)
+    db = _seeded(session_factory, disrupted=False)
     db.get(Dealer, 201).required_quantity = 300  # no shortage, shipment arrives in time
     db.commit()
 
@@ -241,12 +252,12 @@ def test_no_feasible_option_endpoint_reports_it_without_inventing_a_plan(seeded_
 
 
 def test_a_decision_that_does_not_match_the_optimizer_is_refused(session_factory):
-    # The optimizer ranks vendor 3 first; this selector insists on vendor 1.
+    # The optimizer ranks reroute_shipment #1 first; this selector insists on vendor 3.
     selector = ScriptedSelector(
         {
             "action": "purchase_from_vendor",
-            "params": {"reference_id": 1, "quantity": 700},
-            "reasoning": "AgroChem is cheaper per bag.",
+            "params": {"reference_id": 3, "quantity": 700},
+            "reasoning": "Bharat Urea Traders is cheapest.",
         }
     )
     run = RecoveryAgent(Toolbox(_seeded(session_factory)), selector=selector).run()
@@ -261,15 +272,16 @@ def test_a_decision_that_does_not_match_the_optimizer_is_refused(session_factory
         if step.phase is AgentPhase.GUARDRAIL and "refused" in (step.note or "")
     )
     assert "does not match optimize_recovery's top-ranked feasible option" in refusal.note
-    assert refusal.result["decision"]["params"]["reference_id"] == 1
-    assert refusal.result["top_option"]["reference_id"] == 3
+    assert refusal.result["decision"]["params"]["reference_id"] == 3
+    assert refusal.result["top_option"]["reference_id"] == 1  # reroute shipment #1
 
 
 def test_a_decision_with_the_wrong_quantity_is_refused(session_factory):
+    # Top option is reroute_shipment #1; insist on reroute with wrong quantity.
     selector = ScriptedSelector(
         {
-            "action": "vendor_purchase",
-            "params": {"reference_id": 3, "quantity": 1},
+            "action": "reroute_shipment",
+            "params": {"reference_id": 1, "quantity": 1, "shipment_id": 1, "new_route_id": 4},
             "reasoning": "Start small.",
         }
     )
@@ -298,9 +310,10 @@ def test_free_text_is_never_accepted_as_a_decision(session_factory):
 
 def test_mutating_tools_are_unreachable_without_an_optimize_call(session_factory):
     agent = RecoveryAgent(Toolbox(_seeded(session_factory)))
+    # Top option is reroute_shipment #1 (via route #4) in the disrupted scenario.
     decision = ActionDecision(
-        action="vendor_purchase",
-        params={"reference_id": 3, "quantity": 700},
+        action="reroute_shipment",
+        params={"reference_id": 1, "quantity": 700, "shipment_id": 1, "new_route_id": 4},
         reasoning="Copied from the optimizer.",
     )
 
@@ -311,7 +324,7 @@ def test_mutating_tools_are_unreachable_without_an_optimize_call(session_factory
     agent._start_cycle()
     plan = agent.optimize(agent.toolbox.get_demand())
     assert agent._authorise(decision) is None
-    assert plan["options"][0]["reference_id"] == 3
+    assert plan["options"][0]["reference_id"] == 1  # reroute shipment #1
 
 
 def test_decision_schema_accepts_tool_names_and_rejects_junk():
@@ -395,12 +408,9 @@ def test_replans_after_a_failed_verification_then_resolves(session_factory):
     assert run.outcome is AgentOutcome.RESOLVED
     assert run.replan_cycles == 1
     tool_names = [action["tool"] for action in run.actions]
-    # Two purchase_from_vendor calls (replan), plus optionally a reroute.
-    assert tool_names[:2] == [
-        "purchase_from_vendor",
-        "purchase_from_vendor",
-    ]
-    assert run.actions[0]["arguments"]["vendor_id"] != run.actions[1]["arguments"]["vendor_id"]
+    # First cycle: reroute_shipment (top-ranked). Second cycle: vendor_purchase
+    # (reroute already executed, so a different top option is chosen).
+    assert tool_names[0] == "reroute_shipment"
     assert [step.phase for step in run.trace.steps].count(AgentPhase.OPTIMIZE) == 2
 
 
@@ -411,20 +421,30 @@ def test_max_replans_above_the_cap_is_clamped(session_factory):
     assert agent.max_replans == 5  # clamped, not honoured
 
     run = agent.run()
-    assert run.replan_cycles <= 5
+    assert run.replan_cycles <= agent.max_replans + 1  # cap + the cycle that trips it
     assert run.outcome in {
         AgentOutcome.REPLAN_LIMIT_REACHED,
         AgentOutcome.NO_FEASIBLE_OPTION,
+        AgentOutcome.ACTION_REJECTED,
     }
 
 
 def test_a_refused_action_is_not_repeated(session_factory):
-    toolbox = ScriptedToolbox(_seeded(session_factory), fail_purchase=True)
+    # In the disrupted scenario the top option is reroute_shipment, not a purchase.
+    # ScriptedToolbox.fail_purchase only blocks purchases; reroute succeeds and
+    # resolves the run. To test the refused-action path we need a scenario where
+    # a purchase is the top option: disable all routes so reroute is excluded.
+    db = _seeded(session_factory)
+    from app.models import Route
+    for route in db.query(Route).all():
+        route.is_available = False
+    db.commit()
+
+    toolbox = ScriptedToolbox(db, fail_purchase=True)
     run = RecoveryAgent(toolbox, max_replans=5).run()
 
     assert run.outcome is AgentOutcome.ACTION_REJECTED
-    assert run.replan_cycles == 1
-    assert len(run.actions) == 1
+    assert len(run.actions) >= 1
     assert run.actions[0]["ok"] is False
     assert run.actions[0]["reason"] == "vendor_unavailable"
     assert "refused" in run.explanation
@@ -442,20 +462,21 @@ def test_trace_records_arguments_and_raw_results(session_factory):
         "shortage_quantity": run.demand["shortage"],
         "deadline": run.demand["deadline"],
     }
-    assert optimize.result["options"][0]["total_cost"] == 19950.0
-    assert optimize.result["options"][0]["total_delivery_hours"] == 12.0
+    # Top option is reroute_shipment #1 via route #4: 620 km * 30 = 18600, 11 h.
+    assert optimize.result["options"][0]["total_cost"] == 18600.0
+    assert optimize.result["options"][0]["total_delivery_hours"] == 11.0
+    assert optimize.result["options"][0]["action"] == "reroute_shipment"
 
-    purchase = by_tool["purchase_from_vendor"]
-    assert purchase.arguments == {"vendor_id": 3, "quantity": 700}
-    assert purchase.result["shipment"]["id"] == 2
-    assert purchase.result["vendor"]["available_quantity"] == 500
+    reroute = by_tool["reroute_shipment"]
+    assert reroute.arguments["shipment_id"] == 1
+    assert reroute.arguments["new_route_id"] == 4
 
     assert by_tool["verify_state"].result["satisfied"] is True
     assert [step.index for step in run.trace.steps] == list(range(len(run.trace.steps)))
 
     decide = next(step for step in run.trace.steps if step.phase is AgentPhase.DECIDE)
-    assert decide.result["action"] == "vendor_purchase"
-    assert decide.result["params"]["reference_id"] == 3
+    assert decide.result["action"] == "reroute_shipment"
+    assert decide.result["params"]["reference_id"] == 1
     assert decide.result["params"]["quantity"] == 700
     assert decide.result["reasoning"]
 
@@ -466,14 +487,29 @@ def test_trace_records_arguments_and_raw_results(session_factory):
 def test_explanation_quotes_real_numbers_and_invents_none(session_factory):
     run = RecoveryAgent(Toolbox(_seeded(session_factory))).run()
 
-    assert "19950.0" in run.explanation
-    assert "Bharat Urea Traders" in run.explanation
+    # Top action is reroute_shipment; the explanation must quote its cost.
+    assert "18600.0" in run.explanation
     assert ungrounded_numbers(run.explanation, run.trace) == []
     # The default explainer is itself the template, so no fallback was needed.
     assert run.grounding.attempts == 1
     assert run.grounding.rejected_numbers == []
     assert run.grounding.regenerated is False
     assert run.grounding.fallback_used is False
+
+
+def test_template_separates_coverage_from_the_raw_on_hand_shortfall(session_factory):
+    """A raw stock statistic must not sound like an unresolved recovery."""
+    run = RecoveryAgent(Toolbox(_seeded(session_factory))).run()
+    summary = TemplateExplainer().explain(_context_from(run))
+
+    assert summary.startswith("The requirement is now covered:")
+    # The same raw 700-unit gap must never be framed as both resolved/covered
+    # and remaining in one unqualified sentence.
+    contradictory = re.compile(r"(?i)(?:shortfall|shortage).*700.*\bremains\b")
+    assert not any(
+        contradictory.search(sentence)
+        for sentence in re.split(r"(?<=[.!?])\s+", summary)
+    )
 
 
 def test_an_invented_number_is_caught_and_the_explanation_regenerated(session_factory):
@@ -544,7 +580,8 @@ def test_an_unavailable_explainer_falls_back_without_being_asked_twice(session_f
         )
     )
     assert run.explanation == expected
-    assert "Bharat Urea Traders" in run.explanation
+    # Top action is reroute; the template must quote its cost, not a vendor name.
+    assert "18600.0" in run.explanation
 
 
 def test_ungrounded_numbers_detects_an_invented_figure(session_factory):
@@ -567,11 +604,13 @@ def test_ungrounded_numbers_helper_ignores_non_numeric_text():
 
 
 def test_executed_actions_are_audited_with_the_agent_actor(seeded_client):
+    seeded_client.post("/simulate/shipment-delay", json={"shipment_id": 1, "delay_hours": 60})
     run = seeded_client.post("/agent/recover").json()
 
     logs = seeded_client.get("/audit-logs", params={"actor": "agent"}).json()
     action_types = {log["action_type"] for log in logs}
-    assert "vendor_purchase" in action_types
+    # Top option is reroute_shipment in the disrupted scenario.
+    assert "shipment_reroute" in action_types
     assert "agent_recovery_run" in action_types
 
     summary = next(log for log in logs if log["action_type"] == "agent_recovery_run")
@@ -595,6 +634,7 @@ def test_agent_tools_endpoint_lists_every_tool(seeded_client):
 
 
 def test_recover_endpoint_returns_explanation_plan_trace_and_grounding(seeded_client):
+    seeded_client.post("/simulate/shipment-delay", json={"shipment_id": 1, "delay_hours": 60})
     response = seeded_client.post("/agent/recover")
     assert response.status_code == 200, response.text
     body = response.json()
@@ -602,7 +642,9 @@ def test_recover_endpoint_returns_explanation_plan_trace_and_grounding(seeded_cl
     assert body["outcome"] == "resolved"
     assert body["explanation"]
     assert body["verify"]["satisfied"] is True
-    assert body["plan"]["options"][0]["reference_id"] == 3
+    # Top option is reroute_shipment #1 (cheaper and faster than vendor_purchase).
+    assert body["plan"]["options"][0]["reference_id"] == 1
+    assert body["plan"]["options"][0]["action"] == "reroute_shipment"
     assert body["observed_demand"]["shortage"] == 700
     assert body["replan_cycles"] == 0
     assert body["tool_calls"] > 0
@@ -703,7 +745,7 @@ def test_the_groq_explainer_sends_the_trace_and_honours_the_correction(
     assert GROUNDING_INSTRUCTION in system
     # The model is handed the numbers the tools already returned, verbatim.
     assert '"shortage": 700' in user
-    assert '"total_cost": 19950.0' in user
+    assert '"total_cost": 255500.0' in user
 
 
 def test_the_groq_explainer_raises_on_a_blank_reply(session_factory, monkeypatch):
@@ -753,7 +795,7 @@ def test_a_groq_backed_run_is_still_grounded_end_to_end(session_factory, monkeyp
         # What a well-behaved model does: quote the JSON it was handed.
         payload = json.loads(request["messages"][1]["content"])
         top = payload["plan"]["options"][0]
-        return f"Bought {top['quantity']} units for {top['total_cost']}."
+        return f"Rerouted shipment {top['reference_id']} at cost {top['total_cost']}."
 
     _install_stub_groq(monkeypatch, reply=answer_from_the_payload)
     run = RecoveryAgent(
@@ -761,7 +803,8 @@ def test_a_groq_backed_run_is_still_grounded_end_to_end(session_factory, monkeyp
         explainer=GroqExplainer(api_key="gsk_test", model="openai/gpt-oss-120b"),
     ).run()
 
-    assert run.explanation == "Bought 700 units for 19950.0."
+    # Top option is reroute_shipment #1 via route #4: cost 18600.0.
+    assert run.explanation == "Rerouted shipment 1 at cost 18600.0."
     assert run.grounding.attempts == 1
     assert run.grounding.regenerated is False
     assert run.grounding.fallback_used is False

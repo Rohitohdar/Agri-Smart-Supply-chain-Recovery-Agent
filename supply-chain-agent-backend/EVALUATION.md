@@ -46,15 +46,15 @@ trail recorded, not a separate tally.
 ```text
   RUN  DISRUPTION                        OUTCOME                    COVER  REPLAN  CALLS        COST   HOURS     CARBON     WALL
   ---  --------------------------------  -------------------------  -----  ------  -----  ----------  ------  ---------  -------
-    1  shipment_delay 31.4h              resolved                   yes         0      9      19,950    12.0      2,940    0.04s
-    2  shipment_delay 85h                resolved                   yes         0      9      19,950    12.0      2,940    0.04s
+    1  shipment_delay 31.4h              resolved                   yes         0      9     255,500    12.0      2,940    0.04s
+    2  shipment_delay 85h                resolved                   yes         0      9     255,500    12.0      2,940    0.04s
     3  demand_spike -> 2171              no_feasible_option          NO          0      7           0     0.0          0    0.04s
     4  demand_spike -> 1953              no_feasible_option          NO          0      7           0     0.0          0    0.04s
-    5  vendor_failure #1 AgroChem Ind.   resolved                   yes         0      9      19,950    12.0      2,940    0.04s
-    6  shipment_delay 11.5h              resolved                   yes         0      9      19,950    12.0      2,940    0.05s
-    7  shipment_delay 43.7h              resolved                   yes         0      9      19,950    12.0      2,940    0.05s
+    5  vendor_failure #1 AgroChem Ind.   resolved                   yes         0      9     255,500    12.0      2,940    0.04s
+    6  shipment_delay 11.5h              resolved                   yes         0      9     255,500    12.0      2,940    0.05s
+    7  shipment_delay 43.7h              resolved                   yes         0      9     255,500    12.0      2,940    0.05s
     8  demand_spike -> 1693              no_feasible_option          NO          0      7           0     0.0          0    0.03s
-  TOTAL                                                            5/8         0    8.2      99,750    60.0     14,700     1.9s
+  TOTAL                                                            5/8         0    8.2   1,277,500    60.0     14,700     1.9s
 ```
 
 ### Headline metrics
@@ -66,7 +66,7 @@ trail recorded, not a separate tally.
 | Average recovery time | **0.04 s** wall clock (min 0.03 s, max 0.05 s) |
 | Average replans | **0.00** per disruption (0 total, cap 5) |
 | Average tool calls | 8.2 per run |
-| Cost | average **12,468.8** · total **99,750.0** |
+| Cost | average **159,687.5** · total **1,277,500.0** |
 | Delivery time | average **7.5 h** · total **60.0 h** |
 | Carbon | average **1,837.5** · total **14,700.0** |
 | Invariants checked | 39 held, 0 failed, over 1.9 s |
@@ -106,7 +106,7 @@ the requirement ends up covered — including runs where it was *already* covere
 before the agent acted. In run 1 the disruption only delayed the inbound shipment
 by 31.4 h, so it still landed ~40 h before the deadline and the 700 units never
 stopped covering the shortfall. The agent bought 700 more bags anyway. Every
-resolved run cost an identical 19,950 for exactly this reason, and "covered at the
+resolved run cost an identical 255,500 for exactly this reason, and "covered at the
 end" scores all of them as wins. A metric that counted *acting when nothing was
 required* as a failure would read far lower, and would be the honest one.
 
@@ -140,7 +140,7 @@ per run — the honest figure to put on a slide once an LLM writes the prose.
 presentation scripts against. Its exact numbers are in
 [PRESENTATION.md](PRESENTATION.md), and they line up with the table above: the
 same 700-unit shortfall, the same 700-unit purchase from Bharat Urea Traders at
-₹19,950 / 12.0 h / 2,940 kg carbon, score 0.40, and the same 0 replans.
+₹255,500 / 12.0 h / 2,940 kg carbon, score 0.00, and the same 0 replans.
 
 ```bash
 python demo.py    # 39 checks, 0 failed, plus 3 reported findings
@@ -161,11 +161,11 @@ python demo.py    # 39 checks, 0 failed, plus 3 reported findings
       "index": 1, "disruption": "shipment_delay 31.4h", "outcome": "resolved",
       "covered": true, "replans": 0, "tool_calls": 9,
       "action": "vendor_purchase", "quantity": 700,
-      "cost": 19950.0, "delivery_hours": 12.0, "carbon": 2940.0,
+      "cost": 255500.0, "delivery_hours": 12.0, "carbon": 2940.0,
       "seconds": 0.04, "refusals": [], "audit_outcome": "resolved"
     }
   ],
-  "summary": { "runs": 8, "success_rate": 0.625, "average_replans": 0, "total_cost": 99750.0 }
+  "summary": { "runs": 8, "success_rate": 0.625, "average_replans": 0, "total_cost": 1277500.0 }
 }
 ```
 

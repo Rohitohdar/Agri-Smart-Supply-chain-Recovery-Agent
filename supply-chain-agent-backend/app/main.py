@@ -26,6 +26,7 @@ from app.routers import (
     audit,
     audit_logs,
     dealers,
+    debug,
     demand,
     inventory,
     optimize,
@@ -141,5 +142,6 @@ for module in (
     agent,
     audit,
     admin,
+    debug,
 ):
     app.include_router(module.router)
