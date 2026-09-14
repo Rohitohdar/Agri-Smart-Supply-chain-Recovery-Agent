@@ -181,10 +181,17 @@ export function OutcomeCard({ run }: { run: AgentRun | null }) {
       ? option.total_delivery_hours <= run.plan.hours_available
       : null;
 
-  // Plain-language lead
+  // Plain-language lead — worded per the action the agent actually took.
+  const isReroute = action?.tool === "reroute_shipment";
   const leadText =
     run.outcome === "resolved"
-      ? option
+      ? isReroute
+        ? `The agent rerouted Shipment ${option?.reference_id ?? ""} onto a faster lane — arriving ${
+            verdict === "on_time" && marginHours !== null
+              ? `${formatHours(marginHours)} before the deadline`
+              : formatDateTime(arrival)
+          }.`
+        : option
         ? `The agent ordered ${formatNumber(option.quantity)} units from ${option.label} — arriving ${
             verdict === "on_time" && marginHours !== null
               ? `${formatHours(marginHours)} before the deadline`
@@ -223,7 +230,11 @@ export function OutcomeCard({ run }: { run: AgentRun | null }) {
       {option ? (
         <>
           <h3>
-            {action?.tool === "transfer_inventory" ? "Warehouse transfer" : "Vendor purchase"}
+            {action?.tool === "transfer_inventory"
+              ? "Warehouse transfer"
+              : action?.tool === "reroute_shipment"
+              ? "Shipment reroute"
+              : "Vendor purchase"}
             {" — "}
             {option.label}
             <span className="muted"> · {formatNumber(option.quantity)} units</span>
