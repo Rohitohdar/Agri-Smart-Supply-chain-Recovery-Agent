@@ -11,10 +11,24 @@ An **agentic recovery system for agricultural supply chains**, in two parts:
 | Part | Stack | What it is |
 |---|---|---|
 | [`supply-chain-agent-backend`](supply-chain-agent-backend/README.md) | Python · FastAPI · SQLAlchemy · SQLite | Entities, a resettable seed scenario, validated & audited recovery actions, disruption triggers, a deterministic recovery optimizer and the agent loop that orchestrates it all |
-| [`frontend`](frontend/README.md) | TypeScript · React · Vite | An operator console: live system status, disruption controls, and the agent's reasoning trace rendered in plain language |
+| [`frontend`](frontend/README.md) | TypeScript · React · Vite | An illustrated operator console: the live supply network, disruption controls, and the agent's reasoning trace in plain language |
 
 **Jump to:** [demo video script](demo-video-script.md) · [problem & solution brief](problem-and-solution-brief.md) · [architecture](project-architecture.md) ·
 [backend README](supply-chain-agent-backend/README.md) · [frontend README](frontend/README.md) · [evaluation](supply-chain-agent-backend/EVALUATION.md) · [security](supply-chain-agent-backend/SECURITY.md)
+
+## A look at the console
+
+The console is one long illustrated page in three spreads — a field hero, a poster of the
+live supply network, and a torn-paper collage that holds the stress test and the agent.
+Everything on it is wired to the backend: the headline, the route pins and the figures are
+live, and every control calls a real endpoint.
+
+| | |
+|---|---|
+| ![Field hero: valley photograph, live headline and hand-cut photo frames](docs/screenshots/field-hero.jpg) | ![The supply network poster: a brushstroke carrying the live route from vendors to the dealer](docs/screenshots/supply-network.jpg) |
+| **Field hero** — the dealer's live position, stated in one sentence | **Supply network** — vendors, warehouses and the dealer plotted along the route |
+| ![Stress-test collage: torn paper strata under a painted sun](docs/screenshots/stress-test.jpg) | ![The decision: chosen option, ranked candidates and the agent's own summary](docs/screenshots/decision.jpg) |
+| **Stress test** — break the network, then run recovery | **The decision** — every candidate the optimizer weighed, and why |
 
 ## Run it
 
@@ -31,7 +45,7 @@ npm install
 npm run dev                                              # http://localhost:5173
 ```
 
-Then paste `pick-a-key` into the console's **Connection** panel. On first start the backend
+Then paste `pick-a-key` into the console's **Link to the Backend** section (at the foot of the page). On first start the backend
 creates `supply_chain.db` and seeds it automatically; `POST /admin/reset` returns it to the
 starting state at any time. All 264 backend tests run offline with no API key:
 
@@ -56,6 +70,7 @@ cd supply-chain-agent-backend && python -m pytest -q
 
 ```
 frontend/                          React operator console (Vite + TypeScript)
+docs/screenshots/                  console screenshots used in this README
 supply-chain-agent-backend/        FastAPI service — the whole system lives under app/
   app/routers/                     HTTP endpoints (CRUD, read views, actions, simulate, agent)
   app/services/                    validation, transactions, audit — the only mutator
@@ -89,7 +104,7 @@ demo-video-script.md               shot-by-shot script for the 3–5 minute demo
 | [Project architecture](project-architecture.md) | Layers, data flow, the agent loop, and why each piece sits where it does |
 | [Demo video script](demo-video-script.md) | A 3–5 minute shot-by-shot script with real numbers from a logged run |
 | [Backend README](supply-chain-agent-backend/README.md) | API reference, data models, seed scenario, security and configuration |
-| [Frontend README](frontend/README.md) | The console's panels, polling design and auth layer |
+| [Frontend README](frontend/README.md) | The console's sections, visual design, polling and auth layer |
 | [Evaluation](supply-chain-agent-backend/EVALUATION.md) | Measured results over 8 runs — and an honest reading of them |
 | [Presentation notes](supply-chain-agent-backend/PRESENTATION.md) | Approach, challenges, and the original presentation summary |
 | [Security](supply-chain-agent-backend/SECURITY.md) | Every security measure and its reasoning |

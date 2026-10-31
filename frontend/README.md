@@ -1,12 +1,14 @@
-# Supply Chain Agent Console
+# Agri Smart Recovery — Console
 
-The operator console for the supply-chain recovery agent: live system status,
-the disruption controls used to break the scenario, and the agent's reasoning
-trace rendered in plain language.
+The operator console for the supply-chain recovery agent: the live supply
+network, the disruption controls used to break the scenario, and the agent's
+reasoning trace rendered in plain language.
 
-Built with **Vite + React + TypeScript**. No UI framework — one hand-written
-stylesheet holds the whole color vocabulary, so a state always reads the same way
-wherever it appears.
+Built with **Vite + React + TypeScript**. No UI framework and no chart library —
+the illustration is hand-built SVG, and one stylesheet holds the whole visual
+system, so a state always reads the same way wherever it appears.
+
+![The supply network poster](../docs/screenshots/supply-network.jpg)
 
 ## Quickstart
 
@@ -23,8 +25,8 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Then paste `pick-a-key` into the **API key** field in the Connection panel. The
-controls stay locked until you do.
+Then paste `pick-a-key` into the **API key** field under *Link to the Backend*,
+at the foot of the page. The controls stay locked until you do.
 
 **Why the console serves on `localhost:5173` specifically:** the backend's default
 `CORS_ORIGINS` is exactly `http://localhost:5173`, so a freshly started backend
@@ -34,14 +36,18 @@ you so rather than failing silently.
 
 **Demo walkthrough** (the flow the console is built around):
 
-1. `Reset scenario` in the Connection panel to start from the seeded state.
-2. Break something with the disruption panel — delay the shipment, block a route,
-   disable a vendor, or raise demand.
-3. Watch the status panel turn red and the disruption appear under *Active
-   disruptions*.
-4. `Run recovery` and watch the agent's reasoning appear step by step.
+1. `Reset scenario` under *Link to the Backend* to start from the seeded state.
+2. Break something from the *Disruptions To Test* cards — delay the shipment,
+   block a route, disable a vendor, or raise demand.
+3. Watch the headline turn terracotta, the route pins change, and the disruption
+   appear in the ledger under *Active disruptions*.
+4. `Run recovery` (in the collage's top bar or the agent section) and watch the
+   agent's reasoning appear step by step.
 5. Read the outcome: cost, delivery against the deadline, carbon, replans, and the
    before/after numbers.
+
+The `01 / 03` counter in the collage tracks this walkthrough from live state:
+reset, then a disruption in effect, then a completed run.
 
 ## Scripts
 
@@ -52,21 +58,48 @@ you so rather than failing silently.
 | `npm run build` | Production bundle into `dist/` |
 | `npm run check` | Typecheck then build |
 
-## The views
+## The page
 
-| View | Panel | Reads |
-|---|---|---|
-| System status | `SystemStatusPanel` | `/demand`, `/shipments`, `/routes`, `/vendors`, `/inventory` |
-| Disruption controls | `DisruptionPanel` | the four `/simulate/*` endpoints |
-| Agent activity feed | `AgentFeed` | `POST /agent/recover` (the reasoning trace) |
-| Before / after | `BeforeAfterCard` | `get_demand` before the run, `verify_state` after |
-| Outcome summary | `OutcomeCard` | the run's plan, actions, verification and grounding |
+One long page in three spreads, top to bottom:
 
-### Color vocabulary
+| Spread | Section | Component | Reads |
+|---|---|---|---|
+| Field hero | Live headline and status | `sections/FieldHero` | the snapshot below |
+| Supply network | Route poster | `sections/NetworkPoster` | `/demand`, `/vendors`, `/inventory` |
+| | Field detail ledger | `SystemStatusPanel` | `/demand`, `/shipments`, `/routes`, `/vendors`, `/inventory` |
+| Stress test | Collage and *Run recovery* | `sections/RecoveryHero` | `POST /agent/recover` |
+| | Disruptions To Test | `DisruptionPanel` | the four `/simulate/*` endpoints |
+| | How the Agent Reasons | `AgentFeed` | `POST /agent/recover` (the reasoning trace) |
+| | Before & After | `BeforeAfterCard` | `get_demand` before the run, `verify_state` after |
+| | What the Agent Did | `OutcomeCard` | the run's plan, actions, verification and grounding |
+| | Link to the Backend | `ConnectionPanel` | `/health` |
 
-One meaning per color, everywhere: **green** healthy / verified / improved,
-**amber** degraded / advisory / still-short, **red** violated / blocked / failed,
-**blue** neutral information, **grey** inert.
+The headline in the field hero is written from the snapshot, not as a slogan —
+"Keeping Krishi Seva Kendra supplied, on time." becomes "Krishi Seva Kendra is
+short. Time to recover." the moment the constraint breaks. The poster's route
+pins are the real vendors, warehouses and dealer, and turn terracotta when a
+vendor is disabled or the dealer is short.
+
+### Visual system
+
+* **Type** — DM Serif Display for headlines and figures, Jost for body text and
+  spaced capitals, Caveat for the one handwritten note, JetBrains Mono for data.
+  All self-hosted through `@fontsource`; nothing loads from a font CDN.
+* **Paper** — each spread has its own stock (warm cream, off-white, kraft) with a
+  fine SVG grain. Torn edges come from `src/art/torn.ts`, which tears polygon
+  edges with a seeded generator so they tear the same way on every render.
+* **Colour** — one meaning per colour, everywhere: **moss** healthy / verified /
+  improved, **ochre** degraded / advisory / still-short, **terracotta** violated /
+  blocked / failed, **slate** neutral information, **stone** inert. Forest green
+  is the brand ink for primary actions and never means "healthy".
+* **Motion** — kept to the live indicator, the spinner and the slow-turning
+  footer stamp; all of it stops under `prefers-reduced-motion`.
+
+### Photography
+
+The photographs in `public/images/` are from Unsplash, used under the
+[Unsplash License](https://unsplash.com/license); `public/images/CREDITS.md`
+links each one to its source.
 
 ### Reading the agent's run
 
@@ -109,7 +142,14 @@ src/
   state/
     useAgentRun.ts  the run's lifecycle and the progressive reveal
   components/       one component per panel, plus shared pill/stat/details bits
-  styles.css        the whole palette, in one file
+  sections/         the illustrated spreads: hero, poster, collage, footer
+  art/
+    Defs.tsx        shared SVG filters (paper grain, pigment, lift, bristle)
+                    and the organic photo-frame clip paths
+    Icons.tsx       emblems, line sketches and icons, one stroke vocabulary
+    torn.ts         seeded torn-paper edge geometry
+  styles.css        the whole visual system, in one file
+public/images/      photographs, with CREDITS.md
 ```
 
 ### The auth layer is not optional
@@ -167,5 +207,5 @@ See `.env.example`. Two variables, both optional:
 | `VITE_API_BASE_URL` | `http://127.0.0.1:8000` | Backend origin |
 | `VITE_CURRENCY_SYMBOL` | `₹` | Display-only currency symbol |
 
-The backend URL and the API key can also be changed at runtime in the Connection
-panel, so no rebuild is needed to point the console elsewhere.
+The backend URL and the API key can also be changed at runtime under *Link to the
+Backend*, so no rebuild is needed to point the console elsewhere.
