@@ -32,15 +32,17 @@ function reasonLabel(reason: string): string {
 
 // --- A: Candidate explainability table -------------------------------------
 
-function CandidateTable({ options, excluded, selectedReferenceId }: {
+function CandidateTable({ options, excluded, selected }: {
   options: RankedOption[];
   excluded: ExcludedOption[];
-  selectedReferenceId: number | null;
+  /** The option the agent acted on. Several options can share a reference id
+   *  (one shipment, several reroutes), so it is matched by identity. */
+  selected: RankedOption | null;
 }) {
   return (
     <div className="block">
       <h3>All candidates the optimizer considered</h3>
-      <div style={{ overflowX: "auto" }}>
+      <div className="table-scroll">
         <table className="candidate-table" aria-label="Recovery candidates ranked by the optimizer">
           <thead>
             <tr>
@@ -56,12 +58,12 @@ function CandidateTable({ options, excluded, selectedReferenceId }: {
             {options.map((opt) => (
               <tr
                 key={`opt-${opt.reference_id}-${opt.action}`}
-                className={opt.reference_id === selectedReferenceId ? "row--selected" : undefined}
+                className={opt === selected ? "row--selected" : undefined}
               >
                 <td>
                   <strong>{opt.label}</strong>
-                  {opt.reference_id === selectedReferenceId ? (
-                    <span style={{ marginLeft: 6 }}>
+                  {opt === selected ? (
+                    <span className="selected-tag">
                       <StatusPill tone="ok">Selected</StatusPill>
                     </span>
                   ) : null}
@@ -93,7 +95,7 @@ function CandidateTable({ options, excluded, selectedReferenceId }: {
                 <td className="num">—</td>
                 <td>
                   <span className="reason-tag">
-                    ✗ {reasonLabel(ex.reason)}
+                    {reasonLabel(ex.reason)}
                     {ex.reason === "misses_deadline" && ex.delivery_hours !== null && ex.hours_available !== null
                       ? ` (${formatHours(ex.delivery_hours)} vs ${formatHours(ex.hours_available)} available)`
                       : ""}
@@ -141,7 +143,6 @@ function RiskFlag({ option, hoursAvailable, feasibleCount }: {
 
   return (
     <div className="risk-flag" role="alert">
-      <span className="risk-flag__icon" aria-hidden="true">⚠</span>
       <div className="risk-flag__body">
         <div className="risk-flag__title">Low margin — recommend monitoring closely</div>
         <div className="risk-flag__detail">{reasons.join("; ")}.</div>
@@ -155,9 +156,12 @@ function RiskFlag({ option, hoursAvailable, feasibleCount }: {
 export function OutcomeCard({ run }: { run: AgentRun | null }) {
   if (!run) {
     return (
-      <section className="card" aria-labelledby="outcome-heading">
+      <section className="card" id="decision" aria-labelledby="outcome-heading">
         <header className="card__header">
-          <h2 id="outcome-heading">Outcome</h2>
+          <div className="card__title">
+            <p className="eyebrow">The decision</p>
+            <h2 id="outcome-heading">What the Agent Did</h2>
+          </div>
           <StatusPill tone="neutral">No run yet</StatusPill>
         </header>
         <p className="muted">
@@ -207,20 +211,22 @@ export function OutcomeCard({ run }: { run: AgentRun | null }) {
   const hasCandidates = allOptions.length > 0 || allExcluded.length > 0;
 
   return (
-    <section className="card" aria-labelledby="outcome-heading">
+    <section className="card" id="decision" aria-labelledby="outcome-heading">
       <header className="card__header">
-        <h2 id="outcome-heading">Outcome</h2>
+        <div className="card__title">
+          <p className="eyebrow">The decision</p>
+          <h2 id="outcome-heading">What the Agent Did</h2>
+        </div>
         <div className="card__header-meta">
           <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
           {/* D: Download audit report */}
           <button
             type="button"
             className="button button--ghost"
-            style={{ fontSize: "0.8rem" }}
             aria-label="Download audit report as Markdown"
             onClick={() => downloadAuditReport(run)}
           >
-            ↓ Audit report
+            Download audit report
           </button>
         </div>
       </header>
@@ -331,7 +337,7 @@ export function OutcomeCard({ run }: { run: AgentRun | null }) {
         <CandidateTable
           options={allOptions}
           excluded={allExcluded}
-          selectedReferenceId={option?.reference_id ?? null}
+          selected={option}
         />
       ) : null}
 

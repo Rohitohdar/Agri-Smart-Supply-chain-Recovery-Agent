@@ -14,10 +14,14 @@ import { BeforeAfterCard } from "./components/BeforeAfterCard";
 import { ConnectionPanel, type Controls } from "./components/ConnectionPanel";
 import { DisruptionPanel } from "./components/DisruptionPanel";
 import { OutcomeCard } from "./components/OutcomeCard";
-import { StatusPill } from "./components/StatusPill";
 import { SystemStatusPanel } from "./components/SystemStatusPanel";
+import { ArtDefs } from "./art/Defs";
 import { describeTrace } from "./lib/describe";
 import { countActive, deriveDisruptions, disruptionEntries } from "./lib/disruptions";
+import { FieldHero } from "./sections/FieldHero";
+import { NetworkPoster } from "./sections/NetworkPoster";
+import { RecoveryHero, type DemoStep } from "./sections/RecoveryHero";
+import { SiteFooter } from "./sections/SiteFooter";
 import { isRevealing, useAgentRun } from "./state/useAgentRun";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8000";
@@ -156,7 +160,6 @@ export function App() {
         ? "Constraint violated"
         : "Healthy";
 
-  const heroIcon = !reachable ? "⚠️" : overallTone === "danger" ? "🔴" : overallTone === "warn" ? "🟡" : "🟢";
   const heroSub = !reachable
     ? "Cannot reach the backend — check the URL in the Connection panel."
     : snapshotData?.demand.constraint_violated
@@ -169,106 +172,105 @@ export function App() {
 
   const hasEverRun = agent.state.run !== null || agent.state.status !== "idle";
 
+  const running = agent.state.status === "running";
+  const demoStep: DemoStep = agent.state.run !== null ? 3 : activeCount > 0 ? 2 : 1;
+  const liveText = pollMs === 0 ? "polling paused" : reachable ? "live feed" : "offline";
+  const onRun = () => void agent.start(snapshotData?.demand ?? null);
+
   return (
-    <div className="console">
-      <header className="topbar">
-        <div className="topbar__brand">
-          <span className="topbar__mark" aria-hidden="true">
-            ⬢
-          </span>
-          <div>
-            <h1>Supply Chain Agent Console</h1>
-            <p className="muted">
-              Live status, disruption controls and the recovery agent&apos;s reasoning trace.
-            </p>
-          </div>
-        </div>
-        <div className="topbar__status">
-          <span
-            className={`livelight livelight--${reachable ? (pollMs > 0 ? "on" : "paused") : "off"}`}
-            aria-hidden="true"
-          />
-          <span className="muted">
-            {pollMs === 0 ? "Polling paused" : reachable ? "Live" : "Offline"}
-          </span>
-        </div>
-      </header>
+    <div className="site">
+      <ArtDefs />
 
-      {/* Hero status banner — the single highest-contrast element on the page */}
-      <div className={`hero hero--${overallTone}`} role="status" aria-live="polite">
-        <span className="hero__icon" aria-hidden="true">{heroIcon}</span>
-        <div className="hero__body">
-          <div className={`hero__label hero__label--${overallTone}`}>{overallLabel}</div>
-          <div className="hero__sub">{heroSub}</div>
-        </div>
-        <div className="hero__meta">
-          <StatusPill tone={overallTone}>{overallLabel}</StatusPill>
-        </div>
-      </div>
-
-      {snapshot.error !== null ? (
-        <p className="notice notice--danger">
-          <strong>Cannot read the backend.</strong> {errorMessage(snapshot.error)}
-        </p>
-      ) : null}
-      {resetError ? <p className="notice notice--danger">Reset failed: {resetError}</p> : null}
-
-      <SystemStatusPanel
+      <FieldHero
         snapshot={snapshotData}
-        disruptions={disruptions}
-        disruptionsLoading={auditEnabled && audit.data === null && audit.error === null}
+        reachable={reachable}
+        tone={overallTone}
+        label={overallLabel}
+        sub={heroSub}
+        liveText={liveText}
       />
 
-      <div className="columns">
-        <div className="column">
-          <ConnectionPanel
-            controls={controls}
-            onControlsChange={onControlsChange}
-            health={health.data}
-            healthError={health.error}
-            lastUpdatedAt={snapshot.lastUpdatedAt}
-            onReset={() => void onReset()}
-            resetting={resetting}
-          />
-          <DisruptionPanel
+      <main>
+        {snapshot.error !== null ? (
+          <p className="notice notice--danger page-notice">
+            <strong>Cannot read the backend.</strong> {errorMessage(snapshot.error)}
+          </p>
+        ) : null}
+        {resetError ? <p className="notice notice--danger page-notice">Reset failed: {resetError}</p> : null}
+
+        <div className="paper-sheet">
+          <NetworkPoster snapshot={snapshotData} tone={overallTone} />
+          <SystemStatusPanel
             snapshot={snapshotData}
-            blockedReason={blockedReason}
-            onChanged={onDisruptionChanged}
+            disruptions={disruptions}
+            disruptionsLoading={auditEnabled && audit.data === null && audit.error === null}
           />
         </div>
 
-        <div className="column">
-          <AgentFeed
-            run={agent.state.run}
-            narratives={narratives}
-            status={agent.state.status}
-            error={agent.state.error}
-            revealedCount={agent.state.revealedCount}
+        <div className="kraft">
+          <RecoveryHero
+            step={demoStep}
             canRun={blockedReason === null}
+            running={running}
             blockedReason={blockedReason}
-            hasEverRun={hasEverRun}
-            onRun={() => void agent.start(snapshotData?.demand ?? null)}
-            onSkip={agent.revealAll}
-            onClear={agent.clear}
+            onRun={onRun}
           />
-          <BeforeAfterCard before={agent.state.before} run={agent.state.run} />
-          <OutcomeCard run={agent.state.run} />
-        </div>
-      </div>
 
-      <footer className="footer">
-        <p>
-          Status is polled from <code>GET /demand</code>, <code>/shipments</code>,{" "}
-          <code>/routes</code>, <code>/vendors</code> and <code>/inventory</code>. Controls call
-          the <code>/simulate/*</code> endpoints and <code>POST /agent/recover</code>. Every
-          state-changing call carries the API key and is validated, atomic and audited by the
-          backend — the console cannot bypass that.
-        </p>
-        <p className="muted">
-          {isRevealing(agent.state) ? "Revealing the recorded trace…" : "Trace steps are the ones the backend returned, shown in order."}
-          {" "}Press <em>view details</em> anywhere to see the raw JSON behind a claim.
-        </p>
-      </footer>
+          <div className="kraft__body">
+            <DisruptionPanel
+              snapshot={snapshotData}
+              blockedReason={blockedReason}
+              onChanged={onDisruptionChanged}
+            />
+
+            <AgentFeed
+              run={agent.state.run}
+              narratives={narratives}
+              status={agent.state.status}
+              error={agent.state.error}
+              revealedCount={agent.state.revealedCount}
+              canRun={blockedReason === null}
+              blockedReason={blockedReason}
+              hasEverRun={hasEverRun}
+              onRun={onRun}
+              onSkip={agent.revealAll}
+              onClear={agent.clear}
+            />
+
+            <div className="results">
+              <BeforeAfterCard before={agent.state.before} run={agent.state.run} />
+              <OutcomeCard run={agent.state.run} />
+            </div>
+
+            <ConnectionPanel
+              controls={controls}
+              onControlsChange={onControlsChange}
+              health={health.data}
+              healthError={health.error}
+              lastUpdatedAt={snapshot.lastUpdatedAt}
+              onReset={() => void onReset()}
+              resetting={resetting}
+            />
+          </div>
+
+          <SiteFooter>
+            <p>
+              Status is polled from <code>GET /demand</code>, <code>/shipments</code>,{" "}
+              <code>/routes</code>, <code>/vendors</code> and <code>/inventory</code>. Controls call
+              the <code>/simulate/*</code> endpoints and <code>POST /agent/recover</code>. Every
+              state-changing call carries the API key and is validated, atomic and audited by the
+              backend — the console cannot bypass that.
+            </p>
+            <p>
+              {isRevealing(agent.state)
+                ? "Revealing the recorded trace…"
+                : "Trace steps are the ones the backend returned, shown in order."}{" "}
+              Press <em>view details</em> anywhere to see the raw JSON behind a claim. Photographs
+              from Unsplash.
+            </p>
+          </SiteFooter>
+        </div>
+      </main>
     </div>
   );
 }

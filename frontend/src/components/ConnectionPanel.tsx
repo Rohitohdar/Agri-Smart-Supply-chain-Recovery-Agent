@@ -42,9 +42,12 @@ export function ConnectionPanel({
   const hasKey = controls.apiKey.trim().length > 0;
 
   return (
-    <section className="card" aria-labelledby="connection-heading">
+    <section className="card card--connection" id="connection" aria-labelledby="connection-heading">
       <header className="card__header">
-        <h2 id="connection-heading">Connection</h2>
+        <div className="card__title">
+          <p className="eyebrow">Before you begin</p>
+          <h2 id="connection-heading">Link to the Backend</h2>
+        </div>
         <StatusPill tone={connected ? "ok" : "danger"}>
           {connected ? "Backend reachable" : "Backend unreachable"}
         </StatusPill>

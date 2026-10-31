@@ -467,7 +467,7 @@ function describeVerify(step: TraceStep): Narrative {
     index: step.index,
     phase: step.phase,
     tone: satisfied ? "ok" : "warn",
-    title: satisfied ? "Verified: requirement covered ✅" : "Verified: still short ⚠",
+    title: satisfied ? "Verified: requirement covered" : "Verified: still short",
     detail: sentences.join(" "),
     isAction: false,
   };

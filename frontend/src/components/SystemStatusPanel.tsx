@@ -6,7 +6,7 @@ import { isShipmentActive, shipmentLabel, shipmentTone, type Tone } from "../lib
 import { formatDateTime, formatHours, formatNumber, formatRelative } from "../lib/format";
 import { inboundByDeadline, locationName } from "../lib/supply";
 import type { ActiveDisruption } from "../lib/disruptions";
-import { Meter, Stat } from "./Stat";
+import { CoverageStrata, Stat } from "./Stat";
 import { StatusPill } from "./StatusPill";
 
 const STATUS_ORDER: ShipmentStatus[] = [
@@ -47,18 +47,16 @@ function CollapsibleBlock({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <h3 className="collapsible__title">
           {title}
           {badge}
         </h3>
         <span
           className={`collapsible__chevron${open ? " collapsible__chevron--open" : ""}`}
           aria-hidden="true"
-        >
-          ▼
-        </span>
+        />
       </button>
-      {open ? <div style={{ marginTop: 8 }}>{children}</div> : null}
+      {open ? <div className="collapsible__body">{children}</div> : null}
     </div>
   );
 }
@@ -76,7 +74,10 @@ export function SystemStatusPanel({
     return (
       <section className="card" aria-labelledby="status-heading">
         <header className="card__header">
-          <h2 id="status-heading">System status</h2>
+          <div className="card__title">
+            <p className="eyebrow">The ledger</p>
+            <h2 id="status-heading">Field detail</h2>
+          </div>
           <StatusPill tone="neutral">Waiting for the backend…</StatusPill>
         </header>
       </section>
@@ -108,11 +109,14 @@ export function SystemStatusPanel({
   })).filter((row) => row.count > 0);
 
   return (
-    <section className="card card--wide" aria-labelledby="status-heading">
+    <section className="card card--ledger" aria-labelledby="status-heading">
       <header className="card__header">
-        <h2 id="status-heading">System status</h2>
+        <div className="card__title">
+          <p className="eyebrow">The ledger</p>
+          <h2 id="status-heading">Field detail</h2>
+        </div>
         <div className="card__header-meta">
-          <span className="muted">as of {formatRelative(snapshot.fetchedAt)}</span>
+          <span className="muted">updated {formatRelative(snapshot.fetchedAt)}</span>
           <StatusPill tone={statusTone}>
             {violated ? "Constraint violated" : activeDisruptions.length > 0 ? "Degraded" : "Healthy"}
           </StatusPill>
@@ -158,18 +162,10 @@ export function SystemStatusPanel({
 
       <div className="block">
         <h3>Requirement coverage</h3>
-        <Meter
-          value={demand.available_quantity}
-          max={demand.required_quantity}
-          tone={violated ? "danger" : "ok"}
-          caption={
-            <>
-              On hand {formatNumber(demand.available_quantity)} / {formatNumber(demand.required_quantity)}
-              {inboundOnTime > 0
-                ? ` · plus ${formatNumber(inboundOnTime)} arriving in time`
-                : ""}
-            </>
-          }
+        <CoverageStrata
+          onHand={demand.available_quantity}
+          inbound={inboundOnTime}
+          required={demand.required_quantity}
         />
         {violated && demand.constraint_violations.length > 0 ? (
           <ul className="violations">
@@ -186,7 +182,7 @@ export function SystemStatusPanel({
         <h3>
           Active disruptions
           {activeDisruptions.length > 0 ? (
-            <span className="badge badge--danger" style={{ marginLeft: 6 }}>{activeDisruptions.length}</span>
+            <span className="badge badge--danger">{activeDisruptions.length}</span>
           ) : null}
         </h3>
         {disruptionsLoading ? (
@@ -219,7 +215,7 @@ export function SystemStatusPanel({
         title="Shipments"
         defaultOpen={shipments.some((s) => s.status === "DELAYED")}
         badge={
-          <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <span className="tag-row">
             {byStatus.map((row) => (
               <StatusPill key={row.status} tone={shipmentTone(row.status)}>
                 {shipmentLabel(row.status)} · {row.count}
@@ -229,6 +225,7 @@ export function SystemStatusPanel({
           </span>
         }
       >
+        <div className="table-scroll">
         <table className="table">
           <thead>
             <tr>
@@ -262,6 +259,7 @@ export function SystemStatusPanel({
             ))}
           </tbody>
         </table>
+        </div>
       </CollapsibleBlock>
 
       <div className="split">
@@ -270,7 +268,7 @@ export function SystemStatusPanel({
           title="Routes"
           defaultOpen={blockedRoutes.length > 0}
           badge={
-            <span className="muted" style={{ fontWeight: 400, fontSize: "0.82rem", textTransform: "none", letterSpacing: 0 }}>
+            <span className="collapsible__summary">
               {formatNumber(routes.length - blockedRoutes.length)} of {formatNumber(routes.length)} open
               {blockedRoutes.length > 0 ? (
                 <StatusPill tone="danger" > · {blockedRoutes.length} blocked</StatusPill>
@@ -301,7 +299,7 @@ export function SystemStatusPanel({
           title="Vendors"
           defaultOpen={downVendors.length > 0}
           badge={
-            <span className="muted" style={{ fontWeight: 400, fontSize: "0.82rem", textTransform: "none", letterSpacing: 0 }}>
+            <span className="collapsible__summary">
               {formatNumber(vendors.length - downVendors.length)} of {formatNumber(vendors.length)} available
               {downVendors.length > 0 ? (
                 <StatusPill tone="danger"> · {downVendors.length} down</StatusPill>

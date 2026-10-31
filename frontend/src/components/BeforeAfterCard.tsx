@@ -23,9 +23,12 @@ export function BeforeAfterCard({
 }) {
   if (!before || !run) {
     return (
-      <section className="card" aria-labelledby="before-after-heading">
+      <section className="card" id="verification" aria-labelledby="before-after-heading">
         <header className="card__header">
-          <h2 id="before-after-heading">Before / after</h2>
+          <div className="card__title">
+            <p className="eyebrow">Verification</p>
+            <h2 id="before-after-heading">Before &amp; After</h2>
+          </div>
           <StatusPill tone="neutral">Not run yet</StatusPill>
         </header>
         <p className="muted">
@@ -51,9 +54,12 @@ export function BeforeAfterCard({
   const leadTone = verify?.satisfied ? "ok" : "warn";
 
   return (
-    <section className="card" aria-labelledby="before-after-heading">
+    <section className="card" id="verification" aria-labelledby="before-after-heading">
       <header className="card__header">
-        <h2 id="before-after-heading">Before / after</h2>
+        <div className="card__title">
+          <p className="eyebrow">Verification</p>
+          <h2 id="before-after-heading">Before &amp; After</h2>
+        </div>
         <StatusPill tone={verify?.satisfied ? "ok" : "warn"}>
           {verify?.satisfied ? "Requirement covered" : "Still short"}
         </StatusPill>

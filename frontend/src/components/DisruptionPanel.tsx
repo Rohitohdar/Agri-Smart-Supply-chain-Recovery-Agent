@@ -17,6 +17,8 @@ import { formatHours, formatNumber } from "../lib/format";
 import { isShipmentActive } from "../lib/describe";
 import { locationName } from "../lib/supply";
 import { StatusPill } from "./StatusPill";
+import { Arrow } from "../art/Icons";
+import { tornShape } from "../art/torn";
 
 type ControlKey = "delay" | "route" | "vendor" | "spike";
 
@@ -28,14 +30,25 @@ interface Outcome {
   text: string;
 }
 
+/** Paper-coloured tear along the bottom of each card photograph. */
+const TEAR = tornShape(
+  [[0, 14], [400, 10], [400, 40], [0, 40]],
+  [true, false, false, false],
+  8,
+  5,
+  4,
+);
+
 /**
- * One disruption trigger.
+ * One disruption, set as a destination card: photograph with a torn foot, a
+ * category line, the title, its inputs, and a round arrow that fires it.
  *
- * The four triggers share this shell — heading, inputs, and a button that owns
- * its own busy and disabled state — and differ only in their fields and in what
- * they call, so each reads as a declaration rather than a repeated block.
+ * The four share this shell and differ only in their fields and in what they
+ * call, so each reads as a declaration rather than a repeated block.
  */
 function Control({
+  image,
+  category,
   title,
   hint,
   action,
@@ -46,6 +59,8 @@ function Control({
   hintText,
   children,
 }: {
+  image: string;
+  category: string;
   title: string;
   hint: string;
   action: string;
@@ -57,24 +72,25 @@ function Control({
   children: ReactNode;
 }) {
   return (
-    <div className="control">
-      <div className="control__head">
-        <h3>{title}</h3>
-        <span className="muted">{hint}</span>
+    <article className="scenario">
+      <div className="scenario__photo">
+        <img src={image} alt="" loading="lazy" />
+        <svg viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true">
+          <path d={TEAR} />
+        </svg>
       </div>
-      <div className="control__row">
-        {children}
-        <button
-          type="button"
-          className="button button--danger"
-          disabled={locked || busy}
-          onClick={onAction}
-        >
-          {busy ? busyLabel : action}
-        </button>
-      </div>
-      {hintText ? <p className="control__hint">{hintText}</p> : null}
-    </div>
+      <p className="scenario__category">{category}</p>
+      <h3 className="scenario__title">{title}</h3>
+      <p className="scenario__hint">{hint}</p>
+      <div className="scenario__fields">{children}</div>
+      {hintText ? <p className="scenario__note">{hintText}</p> : null}
+      <button type="button" className="round-go" disabled={locked || busy} onClick={onAction}>
+        <span className="round-go__circle" aria-hidden="true">
+          <Arrow />
+        </span>
+        <span className="round-go__label">{busy ? busyLabel : action}</span>
+      </button>
+    </article>
   );
 }
 
@@ -216,59 +232,57 @@ export function DisruptionPanel({
   }
 
   return (
-    <section className="card" aria-labelledby="disruption-heading">
-      <header className="card__header">
-        <h2 id="disruption-heading">Disruption control panel</h2>
-        <StatusPill tone={locked ? "warn" : "ok"}>{locked ? "Locked" : "Ready"}</StatusPill>
-      </header>
-
-      <p className="muted">
-        Each button injects one disruption through the backend&apos;s <code>/simulate/*</code>{" "}
-        endpoints. Every call is validated against live state, written to the audit trail, and
-        can be refused — you will be told, not faked.
-      </p>
-
-      {/* Demo pre-check */}
-      <div className="control">
-        <div className="control__head">
-          <h3>Demo pre-check</h3>
-          <span className="muted">Run before recording — picks the targeted disruption for you</span>
+    <section className="scenarios" id="disruptions" aria-labelledby="disruption-heading">
+      <header className="scenarios__head">
+        <div>
+          <p className="kicker">Disruption scenarios</p>
+          <h2 id="disruption-heading">Disruptions To Test</h2>
         </div>
-        <div className="control__row">
+        <div className="scenarios__intro">
+          <p>
+            Each card injects one disruption through the backend&apos;s <code>/simulate/*</code>{" "}
+            endpoints — validated against live state, written to the audit trail, and refused
+            out loud when it cannot apply.
+          </p>
+          <div className="scenarios__actions">
           <button
             type="button"
-            className="button"
+            className="text-link"
             disabled={precheckBusy}
             onClick={() => void runPrecheck()}
           >
-            {precheckBusy ? "Checking…" : "What would the agent choose?"}
+            {precheckBusy ? "Checking…" : "What would the agent choose?"} <Arrow />
           </button>
-        </div>
-        {precheckError ? <p className="notice notice--danger">{precheckError}</p> : null}
-        {precheck && topOption ? (
-          <div className="notice notice--info" style={{ marginTop: "0.5rem" }}>
-            <strong>Agent would pick:</strong>{" "}
-            {topOption.action} — {topOption.label} × {topOption.quantity} (score {topOption.score.toFixed(4)})
-            {target ? (
-              <>
-                <br />
-                <strong>Apply this disruption first:</strong> {targetSummary()}
-                <br />
-                <span className="muted" style={{ fontSize: "0.8em" }}>{precheck.demo_instruction}</span>
-              </>
-            ) : null}
+          <StatusPill tone={locked ? "warn" : "ok"}>{locked ? "Controls locked" : "Controls ready"}</StatusPill>
           </div>
-        ) : precheck && !topOption ? (
-          <p className="notice notice--warn">No feasible option — reset the scenario before recording.</p>
-        ) : null}
-      </div>
+        </div>
+      </header>
+
+      {precheckError ? <p className="notice notice--danger">{precheckError}</p> : null}
+      {precheck && topOption ? (
+        <div className="notice notice--info">
+          <strong>Agent would pick:</strong>{" "}
+          {topOption.action} — {topOption.label} × {topOption.quantity} (score {topOption.score.toFixed(4)})
+          {target ? (
+            <>
+              <br />
+              <strong>Apply this disruption first:</strong> {targetSummary()}
+              <span className="muted">{precheck.demo_instruction}</span>
+            </>
+          ) : null}
+        </div>
+      ) : precheck && !topOption ? (
+        <p className="notice notice--warn">No feasible option — reset the scenario before recording.</p>
+      ) : null}
 
       {blockedReason ? <p className="notice notice--warn">{blockedReason}</p> : null}
       {error ? <p className="notice notice--danger">{error}</p> : null}
       {outcome ? <p className="notice notice--ok">{outcome.text}</p> : null}
 
-      <div className="controls">
+      <div className="scenarios__grid">
         <Control
+          image="/images/loading-dock.jpg"
+          category="Logistics"
           title="Delay a shipment"
           hint="Marks it DELAYED and pushes the ETA"
           action="Delay shipment"
@@ -313,6 +327,8 @@ export function DisruptionPanel({
         </Control>
 
         <Control
+          image="/images/dusty-road.jpg"
+          category="Transport"
           title="Block a route"
           hint="Takes it out of service for reroutes"
           action="Block route"
@@ -345,6 +361,8 @@ export function DisruptionPanel({
         </Control>
 
         <Control
+          image="/images/warehouse.jpg"
+          category="Suppliers"
           title="Disable a vendor"
           hint="Removes it from the options the agent can pick"
           action="Disable vendor"
@@ -377,6 +395,8 @@ export function DisruptionPanel({
         </Control>
 
         <Control
+          image="/images/onion-sacks.jpg"
+          category="Market"
           title="Raise demand"
           hint="Must exceed the current requirement"
           action="Raise demand"
@@ -409,7 +429,7 @@ export function DisruptionPanel({
           {/* Inline confirm for demand spike */}
           {confirmSpike ? (
             <div className="inline-confirm">
-              <span className="inline-confirm__prompt">⚠ Raise to {formatNumber(spikeNumber)} units?</span>
+              <span className="inline-confirm__prompt">Raise to {formatNumber(spikeNumber)} units?</span>
               <button
                 type="button"
                 className="button button--danger"
@@ -450,9 +470,9 @@ export function DisruptionPanel({
         </Control>
       </div>
 
-      <p className="card__note">
-        The reset control is in the Connection panel — each injected disruption is cumulative, so
-        restore the scenario between run-throughs.
+      <p className="scenarios__foot">
+        Disruptions are cumulative. Restore the seeded scenario from the Connection panel
+        between run-throughs.
       </p>
     </section>
   );

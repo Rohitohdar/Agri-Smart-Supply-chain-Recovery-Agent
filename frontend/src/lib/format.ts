@@ -87,6 +87,7 @@ export function formatRelative(iso: string | null | undefined, now = new Date())
   if (!date) return "—";
   const deltaHours = (date.getTime() - now.getTime()) / 3_600_000;
   const magnitude = Math.abs(deltaHours);
+  if (magnitude < 1 / 60) return "just now";
   const spoken =
     magnitude < 1
       ? `${Math.round(magnitude * 60)} min`

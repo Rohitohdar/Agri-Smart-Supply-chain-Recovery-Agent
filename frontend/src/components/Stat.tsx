@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Tone } from "../lib/describe";
+import { formatNumber } from "../lib/format";
 
 /** One labelled metric. Big number, small label — no paragraphs. */
 export function Stat({
@@ -23,31 +24,45 @@ export function Stat({
   );
 }
 
-/** A labelled horizontal bar, used for requirement coverage. */
-export function Meter({
-  value,
-  max,
-  tone = "info",
-  caption,
+/**
+ * Requirement coverage drawn as strata: stock on hand, then supply that lands
+ * before the deadline, then whatever is still missing, all against a tick at
+ * the requirement. Every width is one of the backend's own quantities.
+ */
+export function CoverageStrata({
+  onHand,
+  inbound,
+  required,
 }: {
-  value: number;
-  max: number;
-  tone?: Tone;
-  caption?: ReactNode;
+  onHand: number;
+  inbound: number;
+  required: number;
 }) {
-  const ratio = max > 0 ? Math.min(value / max, 1) : 0;
+  const scale = Math.max(required, onHand + inbound, 1);
+  const pct = (value: number) => `${(Math.max(value, 0) / scale) * 100}%`;
+  const gap = Math.max(required - onHand - inbound, 0);
+  const covered = Math.min(onHand + inbound, required);
+
   return (
-    <div className="meter">
+    <figure className="strata">
       <div
-        className="meter__track"
-        role="progressbar"
-        aria-valuenow={Math.round(ratio * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
+        className="strata__bar"
+        role="img"
+        aria-label={`${formatNumber(covered)} of ${formatNumber(required)} required units covered`}
       >
-        <div className={`meter__fill meter__fill--${tone}`} style={{ width: `${ratio * 100}%` }} />
+        <span className="strata__seg strata__seg--onhand" style={{ width: pct(onHand) }} />
+        <span className="strata__seg strata__seg--inbound" style={{ width: pct(inbound) }} />
+        <span className="strata__seg strata__seg--gap" style={{ width: pct(gap) }} />
+        <span className="strata__req" style={{ left: pct(required) }} aria-hidden="true" />
       </div>
-      {caption ? <div className="meter__caption">{caption}</div> : null}
-    </div>
+      <figcaption className="strata__legend">
+        <span><i className="key key--onhand" />On hand <b>{formatNumber(onHand)}</b></span>
+        <span><i className="key key--inbound" />Inbound in time <b>{formatNumber(inbound)}</b></span>
+        {gap > 0 ? (
+          <span><i className="key key--gap" />Uncovered <b>{formatNumber(gap)}</b></span>
+        ) : null}
+        <span className="strata__legend-req"><i className="key key--req" />Requirement <b>{formatNumber(required)}</b></span>
+      </figcaption>
+    </figure>
   );
 }

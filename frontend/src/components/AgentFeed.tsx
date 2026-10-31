@@ -117,9 +117,12 @@ export function AgentFeed({
   }, [revealedCount, running]);
 
   return (
-    <section className="card card--wide" aria-labelledby="feed-heading">
+    <section className="card card--agent" id="agent" aria-labelledby="feed-heading">
       <header className="card__header">
-        <h2 id="feed-heading">Agent activity</h2>
+        <div className="card__title">
+          <p className="eyebrow">The recovery agent</p>
+          <h2 id="feed-heading">How the Agent Reasons</h2>
+        </div>
         <div className="card__header-meta">
           {run ? (
             <StatusPill tone={OUTCOME_META[run.outcome].tone}>
